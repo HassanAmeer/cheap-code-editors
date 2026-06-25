@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+
+# Env files
+.env
+
+# Ignore generated chats and specific projects if you don't want to push them
+chats-history/*.json
+projects/*
+!projects/.gitkeep
