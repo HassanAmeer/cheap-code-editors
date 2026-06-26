@@ -132,7 +132,7 @@ export async function checkAndInstallMissingDependencies(projectsDir) {
 
     if (missingPackages.size > 0) {
       const pkgsToInstall = Array.from(missingPackages);
-      console.log(theme.info(`\n📦 Auto-Dependency Scanner: Doctor-Memory used new packages that are NOT installed in package.json:`));
+      console.log(theme.info(`\n📦 Auto-Dependency Scanner: AI used new packages that are NOT installed in package.json:`));
       console.log(theme.dim(`   ${pkgsToInstall.join(', ')}\n`));
 
       const proceed = await confirm({ message: 'Do you want to install them automatically?', default: true, theme: getPromptTheme() });

@@ -100,7 +100,7 @@ export async function startAutoHealer(scriptName, projectsDir, currentModel = "b
       
       try {
         const proceed = await confirm({ 
-          message: 'Should Doctor-Memory analyze and fix this error automatically using CodeGraph?', 
+          message: 'Should the AI analyze and fix this error automatically using CodeGraph?', 
           default: true, 
           theme: getPromptTheme() 
         });

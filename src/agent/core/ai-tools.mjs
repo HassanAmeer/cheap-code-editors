@@ -165,25 +165,7 @@ export const aiToolsConfig = [
         required: ["memory_text"]
       }
     }
-  },
-  {
-    type: "function",
-    function: {
-      name: "run_doctor_memory",
-      description: "Ask Doctor-Memory (the co-programmer AI) to review code, search repository context, or plan/audit bug fixes across files.",
-      parameters: {
-        type: "object",
-        properties: {
-          instruction: { type: "string", description: "The detailed prompt/question/command for Doctor-Memory." },
-          files: {
-            type: "array",
-            items: { type: "string" },
-            description: "Optional. Array of relative file paths to add to Doctor-Memory's context before running."
-          }
-        },
-        required: ["instruction"]
-      }
-    }
+
   },
   {
     type: "function",

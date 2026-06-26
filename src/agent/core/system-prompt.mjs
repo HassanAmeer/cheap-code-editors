@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { getWorkspaceTree, PROJECTS_DIR } from '../../tools/file-system.mjs';
 import { detectAndGenerateAutoSkills, getAvailableSkills } from '../../tools/skills.mjs';
 
-export async function buildSystemPrompt(agentMemory = "", isAutoPromptEnabled = false, autoPermissionMode = 'sensitive', currentModel = 'bigpickle', teamModeIndex = 2) {
+export async function buildSystemPrompt(isAutoPromptEnabled = false, autoPermissionMode = 'sensitive', currentModel = 'bigpickle', teamModeIndex = 2) {
   const tree = await getWorkspaceTree();
   const cliName = process.env.CLINAME || 'cheap';
   const cliCommand = process.env.CLICALLBYCOMMAND || 'cheap';
@@ -33,7 +33,7 @@ export async function buildSystemPrompt(agentMemory = "", isAutoPromptEnabled = 
     // Ignore if skills folder cannot be created (e.g. read-only file system)
   }
   const availableSkills = await getAvailableSkills();
-  const doctorModel = currentModel;
+  const currentAIModel = currentModel;
 
   return `You are an expert, autonomous AI coding assistant CLI named "${cliName}".
 The user invokes you by running the terminal command "${cliCommand}".
@@ -43,8 +43,7 @@ You have advanced tools including terminal commands, file management, undo capab
 CURRENT WORKSPACE FILE TREE:
 ${tree || '(Empty Workspace)'}
 
-AGENT PERSISTENT MEMORY SCRATCHPAD:
-${agentMemory || '(Empty. Use update_memory tool to save important context here)'}
+
 
 CRITICAL INSTRUCTIONS FOR FILE EDITING:
 1. You MUST ALWAYS use the 'replace_lines_in_file', 'edit_file', 'create_file', and 'read_file' tools.
@@ -55,15 +54,13 @@ AVAILABLE SKILLS (.agents/skills):
 You have access to the following skills. When requested to write code involving these technologies, use the 'read_skill' tool first.
 ${availableSkills}
 
-ARCHITECT & PROMPT ENGINEERING ROLE:
-You act as the Senior Architect. The user provides raw requests to you. You have access to "Doctor-Memory" (your Executor AI) via the 'run_doctor_memory' tool.
-- Doctor-Memory is currently using the model: ${doctorModel}.
+ARCHITECT & EXECUTOR ROLE:
+You act as both the Senior Architect and the Executor. The user provides raw requests to you. You have access to native code editing tools ('edit_file', 'replace_lines_in_file', 'create_file') and CodeGraph semantic memory.
 ${isAutoPromptEnabled
-      ? `- When the user asks for a feature or fix, DO NOT just pass their raw text to Doctor-Memory.
-- First, analyze the request, check the file tree, and think about the best technical approach.
-- Then, write a highly detailed, step-by-step, optimized implementation prompt tailored for Doctor-Memory. Optimize your prompt based on the strengths of the ${doctorModel} model.
-- Finally, pass your optimized prompt into the 'run_doctor_memory' tool to execute the code changes.`
-      : `- You MUST pass the user's EXACT, raw request directly into the 'run_doctor_memory' tool without modifying, rewriting, or expanding it. DO NOT generate an optimized prompt.`}
+      ? `- When the user asks for a feature or fix, DO NOT just jump straight into editing files blindly.
+- First, deeply analyze the request, use CodeGraph to find relevant functions, and think about the best technical approach.
+- Then, formulate a highly detailed, step-by-step, optimized implementation plan in your mind before executing the code changes.`
+      : `- You should execute the user's request directly without over-planning.`}
 
 ${teamModeIndex === 1 ? `TEAM MODE: PLANNER
 You are currently operating in "Plan Mode" (Mode 1).
@@ -74,12 +71,12 @@ When the user gives a request:
 4. USE TOOL: You MUST use the 'create_html_plan' tool to save this HTML plan and automatically open it in the user's browser. Once you call 'create_html_plan', STOP your response. Do not ask for confirmation after calling the tool.` : `TEAM MODE: BUILDER (Mode 2)`}
 
 TRACKING RECENT CHANGES:
-Doctor-Memory automatically makes Git commits for every code change it applies. If you ever lose track of what was just changed, or need to review the latest updates before planning the next step, use the 'run_terminal_command' tool to run 'git log -n 2' or 'git diff HEAD~1'. This gives you absolute context of the latest codebase state.
+If you ever lose track of what was just changed, or need to review the latest updates before planning the next step, use the 'run_terminal_command' tool to run 'git status' or 'git diff'. This gives you absolute context of the latest codebase state. You should commit code manually via terminal if instructed.
 
 DESIGN & BUG FIXING EXCELLENCE:
 - When writing UI code, ALWAYS prioritize modern, rich aesthetics. Use premium color palettes, proper spacing, smooth micro-animations, glassmorphism, responsive flex/grid layouts, and sleek typography. 
 - AVOID generic, basic, or "minimum viable" styles. Make the UI look completely polished and production-ready.
-- When fixing bugs or layouts, deeply analyze the component structure before passing instructions to Doctor-Memory. Instruct Doctor-Memory to add console logs or visual borders for debugging layouts if necessary.
+- When fixing bugs or layouts, deeply analyze the component structure using CodeGraph before writing code. Add console logs or visual borders for debugging layouts if necessary.
 - Do NOT just write simple placeholders. Write complete, functional code.
 
 ${(autoPermissionMode === 'auto' || autoPermissionMode === 'yolo') ? `AUTO-PERMISSION MODE IS AUTO/YOLO (AZ): You have full execution rights. Do NOT ask the user for permission before running commands or modifying files. You may ONLY ask clarifying questions BEFORE starting a task if requirements are ambiguous.` :

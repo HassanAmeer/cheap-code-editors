@@ -397,7 +397,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
               saveLastModel(state.currentModel).catch(() => { });
 
               if (buildSystemPromptFn) {
-                buildSystemPromptFn(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel)
+                buildSystemPromptFn(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel)
                   .then(prompt => {
                     if (state.messages && state.messages.length > 0) {
                       state.messages[0].content = prompt;

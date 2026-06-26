@@ -4,6 +4,7 @@
  * // Do not remove
  */
 import path from 'path';
+import os from 'os';
 import fs from 'fs/promises';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -17,7 +18,7 @@ import { getSoundEnabled, setSoundEnabled, playNotification } from '../../ui/sou
 import { getClientForModel, getModelsGroupedByProvider } from '../../providers/index.mjs';
 import { saveAutoPermissionSetting, saveAutoPromptSetting, saveLastModel, deleteAllChats, saveChatHistory, getAvailableChats, deleteChat, loadChatHistory } from '../history.mjs';
 import { printLogo } from '../../ui/logo.mjs';
-import { getAllChatThreads } from '../db.mjs';
+import { getAllChatThreads, getChatState, updateChatState } from '../db.mjs';
 import { gridPrompt } from '../../ui/gridPrompt.mjs';
 import { undoAction } from '../../tools/editor.mjs';
 import { webAgent } from '../../playwright-web-agent-settings/index.mjs';
@@ -127,11 +128,12 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '⬢ web agent     - Web Agent Task', value: '/web-agent' },
         { name: '↶ undo          - Undo the last edits', value: '/undo' },
         { name: `± diff          - Review git changes in ${process.env.DEBUG === 'true' ? 'projects' : 'workspace'} directory`, value: '/diff' },
-        { name: '◧ compact       - Compact memory to save tokens', value: '/compact' },
         { name: '⏣ test_proj     - Start an auto-fix testing loop on project', value: '/test_proj' },
         { name: '⍻ test_ai       - Test Current AI Model', value: '/test_ai' },
         { name: '⎘ attach        - Attach an image or file', value: '/attach' },
         { name: '◷ history       - Last chats memory', value: '/history' },
+        { name: '⇪ export        - Export Chat History (JSON & HTML)', value: '/export' },
+        { name: '⇘ import        - Import Chat History (JSON)', value: '/import' },
         { name: '⟳ refresh       - Refresh Auto Workspace Memory', value: '/refresh' },
         { name: '⚙ config AI     - Configure AI API Keys (Providers)', value: '/config' },
         { name: '⚙ skills        - Manage Project Skills (Add/List/View/Delete)', value: '/skills' },
@@ -250,59 +252,13 @@ export async function executeSlashCommand(cmdInput, ctx) {
         return { action: 'continue' };
       }
 
-      console.log(theme.info("\n🔍 Phase 1: Doctor-Memory is reviewing the project based on your request..."));
-      let spinner2 = null;
-      const spinner = ora({ text: theme.dim('Analyzing code and generating review plan...'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
-
-      try {
-        const projectsDir = PROJECTS_DIR;
-        const memoryMode = process.env.MEMORY_MODE || 'both';
-        const instruction = `The user has requested the following test/debug task: "${userTestReq}".\nReview the entire project for logical errors, syntax issues, best practices, and bugs specifically related to this request. DO NOT FIX THEM YET. Just generate a detailed plan of what needs to be fixed. Format the plan clearly in bullet points.`;
-
-        const argsArr1 = [
-          "uvx", "aider-chat",
-          "--message", instruction,
-          "--yes", "--no-auto-commits",
-          "--model", state.currentModel
-        ];
-        if (memoryMode === 'custom_only') argsArr1.push("--chat-history-file", "/dev/null");
-
-        const { stdout: stdoutText1 } = await spawnAndCollect(argsArr1[0], argsArr1.slice(1), { cwd: projectsDir, env: process.env });
-
-        spinner.stop();
-        console.log(theme.success("\n📋 Review Plan Generated:\n"));
-        console.log(stdoutText1);
-
-        const proceed = await confirm({ message: 'do you want to proceed plan ?', default: true, theme: getPromptTheme() });
-
-        if (proceed) {
-          console.log(theme.info("\n🚀 Phase 2: Doctor-Memory is applying the fixes..."));
-          spinner2 = ora({ text: theme.dim('Executing fixes...'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
-
-          const instruction2 = `Here is the review plan you just generated:\n\n${stdoutText1}\n\nPlease proceed to implement the fixes according to this plan. Do it carefully.`;
-
-          const argsArr2 = [
-            "uvx", "aider-chat",
-            "--message", instruction2,
-            "--yes", "--no-auto-commits",
-            "--model", state.currentModel
-          ];
-          if (memoryMode === 'custom_only') argsArr2.push("--chat-history-file", "/dev/null");
-
-          const { stdout: stdoutText2 } = await spawnAndCollect(argsArr2[0], argsArr2.slice(1), { cwd: projectsDir, env: process.env });
-
-          spinner2.stop();
-          console.log(theme.success("\n✔ Fixes Applied Successfully:\n"));
-          console.log(stdoutText2);
-        } else {
-          console.log(theme.dim("\nFix aborted by user."));
-        }
-      } catch (err) {
-        spinner.stop();
-        if (spinner2) spinner2.stop();
-        console.log(theme.error(`\n❌ Error during review: ${err.message}`));
-      }
-      return { action: 'continue' };
+      console.log(theme.info("\n🔍 Starting AI Analysis..."));
+      
+      state.messages.push({
+        role: "user",
+        content: `[TEST AI MODE]\nThe user has requested the following test/debug task: "${userTestReq}".\nPlease review the project using CodeGraph, identify logical errors, syntax issues, or bugs related to this request. Generate a plan and fix them using your native editing tools.`
+      });
+      return { action: 'proceed' };
     }
 
     if (cmdStr.startsWith('/test ')) {
@@ -433,7 +389,7 @@ Respond ONLY with the commit message text. No markdown blocks.`;
         state.messages.push({
           role: "user",
           content: [
-            { type: "text", text: `[VISUAL UI EDITOR MODE]\nTarget URL: ${url}\nUser Request: "${uiPrompt}"\n\nInstructions: \n1.Look at the attached screenshot of the user's web app.\n2. Identify which UI elements need changing based on the request.\n3. Figure out which source files (React/HTML/CSS) in the ${process.env.DEBUG === 'true' ? "'projects/'" : "current"} directory correspond to this UI.\n4. Use 'run_doctor_memory' to edit those files and apply the fix.\n5. Once Doctor-Memory finishes and you are done, reply to the user summarizing the changes. The system will then automatically take an 'After' screenshot.` },
+            { type: "text", text: `[VISUAL UI EDITOR MODE]\nTarget URL: ${url}\nUser Request: "${uiPrompt}"\n\nInstructions: \n1.Look at the attached screenshot of the user's web app.\n2. Identify which UI elements need changing based on the request.\n3. Figure out which source files (React/HTML/CSS) in the ${process.env.DEBUG === 'true' ? "'projects/'" : "current"} directory correspond to this UI.\n4. Use 'edit_file' and 'replace_lines_in_file' to edit those files and apply the fix.\n5. Once you are done, reply to the user summarizing the changes. The system will then automatically take an 'After' screenshot.` },
             { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
           ]
         });
@@ -464,8 +420,9 @@ Instructions for you (The Architect):
    - For Next.js: 'npx create-next-app@latest [name] --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm'
    - For Vite: 'npm create vite@latest [name] -- --template react-ts'
 4. Wait for the command to finish.
-5. Use 'run_doctor_memory' to build the initial UI or boilerplate files inside the newly created directory.
-6. Tell the user how to start the dev server (e.g., ${process.env.DEBUG === 'true' ? "'cd projects/name && npm run dev'" : "'cd name && npm run dev'"} or suggest using '/final_run_test dev').`;
+5. Use 'run_terminal_command' to run 'npx codegraph init' inside the new project directory.
+6. Use 'create_file' and 'edit_file' to build the initial UI or boilerplate files inside the newly created directory.
+7. Tell the user how to start the dev server (e.g., ${process.env.DEBUG === 'true' ? "'cd projects/name && npm run dev'" : "'cd name && npm run dev'"} or suggest using '/final_run_test dev').`;
     }
 
     if (lowerCmd.startsWith("/final_run_test ") || lowerCmd === '/final_run_test') {
@@ -504,7 +461,7 @@ Instructions for you (The Architect):
       state.testRetries = 0;
       state.sessionUndoStack = [];
       state.lastAiEditedFiles = [];
-      state.messages = [{ role: "system", content: await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
+      state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
       state.chatId = 'chat_' + Date.now();
       console.log(theme.success("✔ Terminal cleared and fresh session started! (Persistent Memory Retained)\n"));
       return { action: 'continue' };
@@ -537,7 +494,7 @@ Instructions for you (The Architect):
             const spinner = ora({ text: theme.dim("Loading project context & skills..."), color: false }).start();
             try {
               await detectAndGenerateAutoSkills();
-              state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+              state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
               spinner.succeed(theme.success("✔ Project skills and memory updated!"));
             } catch (e) {
               spinner.fail(theme.error("Failed to load new project details."));
@@ -591,8 +548,10 @@ Instructions for you (The Architect):
       spinner = ora({ text: theme.dim('Refreshing Auto Workspace Memory...'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
       await getWorkspaceTree();
       await detectAndGenerateAutoSkills();
-      state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
-      spinner.succeed(theme.success('✔ Workspace tree and Auto-Skills synced successfully!'));
+      const { initCodegraph } = await import('../../tools/codegraph.mjs');
+      await initCodegraph(PROJECTS_DIR);
+      state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+      spinner.succeed(theme.success('✔ Workspace tree, Auto-Skills, and CodeGraph synced successfully!'));
     } catch (err) {
       if (spinner) spinner.fail(theme.error(`❌ Failed to refresh workspace: ${err.message}`));
     }
@@ -629,32 +588,7 @@ Instructions for you (The Architect):
         const pastState = await getChatState(targetId);
         let messages = pastState?.messages || [];
         
-        // --- HISTORY SUMMARIZATION / CONTEXT PRUNING ---
-        if (messages.length > 20) {
-           console.log(theme.dim(`\nThis session has a large history (${messages.length} messages). Summarizing oldest messages to save context...`));
-           try {
-             const aiClient = getClientForModel(state.currentModel);
-             const messagesToSummarize = messages.slice(1, messages.length - 10);
-             const summaryPrompt = "Please provide a concise summary of the following conversation history so far. Focus on key decisions, code written, and current status:\n\n" + 
-                 messagesToSummarize.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n\n');
-             
-             const summaryResponse = await aiClient.invoke([{ role: 'user', content: summaryPrompt }]);
-             const summaryContent = `[SYSTEM SUMMARY OF PREVIOUS CONVERSATION]\n${summaryResponse.content || summaryResponse}\n[/SYSTEM SUMMARY]`;
-             
-             // Keep the system prompt (index 0), the new summary, and the last 10 messages
-             const newMessages = [
-                 messages[0],
-                 { role: 'system', content: summaryContent },
-                 ...messages.slice(messages.length - 10)
-             ];
-             
-             await updateChatState(targetId, { messages: newMessages });
-             messages = newMessages;
-             console.log(theme.success(`✔ Summarized history successfully!`));
-           } catch (err) {
-             console.log(theme.error(`⚠️ Failed to summarize history: ${err.message}`));
-           }
-        }
+        // History summarization is now automatically handled in background by history.mjs
         
         return { action: 'resume', chatId: targetId, messages: messages };
       }
@@ -690,7 +624,7 @@ Instructions for you (The Architect):
 
       state.autoPermissionMode = newMode;
       await saveAutoPermissionSetting(newMode);
-      state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+      state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
 
       return { action: 'redraw', message: theme.success(`✔ Auto Permission Mode set to: ${newMode.toUpperCase()}\n`) };
     } catch (e) {
@@ -745,7 +679,7 @@ Instructions for you (The Architect):
         state.screenPrompts = [];
         state.sessionUndoStack = [];
         state.lastAiEditedFiles = [];
-        state.messages = [{ role: "system", content: await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
+        state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
         console.log(theme.success("\n✔ All chat history has been permanently deleted! (Persistent Memory Retained)"));
       } else {
         console.log(theme.error("\n❌ Failed to delete chats."));
@@ -754,53 +688,6 @@ Instructions for you (The Architect):
       console.log(theme.error(`\n❌ Error deleting chats: ${err.message}`));
     } finally {
       if (spinner) spinner.stop();
-    }
-    return { action: 'continue' };
-  }
-  if (lowerCmd === '/compact') {
-    if (state.messages.length > 15) {
-      const spinner = ora({ text: theme.dim('Condensing memory... (saving context)'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
-      const activeClient = getClientForModel(state.currentModel);
-      try {
-        const summaryPrompt = [
-          { role: "system", content: "Summarize the key file structures, line numbers, and architectural decisions from this conversation. Be extremely concise. ONLY output the summary." },
-          ...state.messages.slice(1, state.messages.length - 15)
-        ];
-        const sumRes = await activeClient.chat.completions.create({
-          model: state.currentModel,
-          messages: summaryPrompt,
-          max_tokens: parseInt(process.env.OUTPUT_CONTEXT_TOKENS || "8192", 10)
-        });
-        const summary = sumRes.choices[0].message.content;
-        state.agentPersistentMemory += `\n[Auto-Summary]: ${summary}\n`;
-        if (state.agentPersistentMemory.length > 50000) {
-          const cutStr = state.agentPersistentMemory.substring(state.agentPersistentMemory.length - 48000);
-          const nextNewline = cutStr.indexOf('\n');
-          const finalCut = nextNewline !== -1 ? cutStr.substring(nextNewline) : cutStr;
-          state.agentPersistentMemory = "...[TRUNCATED_OLD_MEMORY]\n" + finalCut;
-        }
-        await savePersistentMemory(state.agentPersistentMemory);
-        state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
-      } catch (e) {
-      }
-
-      let safeIndex = state.messages.length - 15;
-      let originalSafeIndex = safeIndex;
-      while (safeIndex > 1) {
-        if (state.messages[safeIndex].role === 'user') break;
-        safeIndex--;
-      }
-      if (state.messages[safeIndex].role !== 'user') {
-        safeIndex = originalSafeIndex;
-        while (safeIndex > 1 && (state.messages[safeIndex].role === 'tool' || (state.messages[safeIndex - 1] && state.messages[safeIndex - 1].tool_calls))) {
-          safeIndex--;
-        }
-      }
-      state.messages = [state.messages[0], ...state.messages.slice(safeIndex)];
-      saveChatHistory(state.chatId, state.messages);
-      spinner.succeed(theme.success("✔ Context compacted! Saved token space while preserving recent memory."));
-    } else {
-      console.log(theme.info("Context is already compact."));
     }
     return { action: 'continue' };
   }
@@ -942,7 +829,7 @@ Instructions for you (The Architect):
           const loadedMsgs = await loadChatHistory(selectedChat);
           if (loadedMsgs && loadedMsgs.length > 0) {
             state.messages = loadedMsgs;
-            state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+            state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
             state.chatId = selectedChat;
 
             return { action: 'redraw', message: theme.success(`\n✔ Loaded chat: ${selectedChat}\n`) };
@@ -957,6 +844,92 @@ Instructions for you (The Architect):
         }
         stayInHistory = false;
         throw err;
+      }
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/export') {
+    let spinner = null;
+    try {
+      spinner = ora({ text: theme.dim('Exporting all chats...'), color: false }).start();
+      const threadIds = await getAllChatThreads();
+      const exportData = [];
+      for (const id of threadIds) {
+         const msgs = await getChatState(id);
+         if (msgs && msgs.length > 0) {
+            exportData.push({ id, messages: msgs });
+         }
+      }
+      
+      const ts = Date.now();
+      const downloadsPath = path.join(os.homedir(), 'Downloads');
+      
+      const jsonPath = path.join(downloadsPath, `cli_chats_export_${ts}.json`);
+      await fs.writeFile(jsonPath, JSON.stringify(exportData, null, 2));
+
+      let htmlContent = `<html><head><title>CLI Chat History Export</title><style>body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: #fff; } .chat { border: 1px solid #444; margin-bottom: 20px; padding: 15px; border-radius: 8px; } .msg { margin: 10px 0; } .role-user { color: #5ccfe6; } .role-assistant { color: #a2d92a; } pre { background: #000; padding: 10px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }</style></head><body><h1>CLI Chat History Export</h1>`;
+      
+      for (const chat of exportData) {
+         htmlContent += `<div class="chat"><h2>Chat ID: ${chat.id}</h2>`;
+         for (const msg of chat.messages) {
+            if (msg.role !== 'system') {
+               htmlContent += `<div class="msg"><strong class="role-${msg.role}">${msg.role.toUpperCase()}:</strong> <pre>${typeof msg.content === 'string' ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Complex Data'}</pre></div>`;
+            }
+         }
+         htmlContent += `</div>`;
+      }
+      htmlContent += `</body></html>`;
+
+      const htmlPath = path.join(downloadsPath, `cli_chats_export_${ts}.html`);
+      await fs.writeFile(htmlPath, htmlContent);
+
+      spinner.stop();
+      console.log(theme.success(`\n✔ Exported ${exportData.length} chats successfully!`));
+      console.log(theme.info(`JSON: ${jsonPath}`));
+      console.log(theme.info(`HTML: ${htmlPath}\n`));
+    } catch (e) {
+      if (spinner) spinner.stop();
+      console.log(theme.error(`\n❌ Export failed: ${e.message}\n`));
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/import') {
+    try {
+      console.log(theme.dim("Opening JSON file picker..."));
+      let inputPath = null;
+      if (process.platform === 'darwin') {
+        const script = `osascript -e 'tell application (path to frontmost application as text) to set thefile to choose file with prompt "Select a JSON file to import" of type {"json"} default location (path to downloads folder)' -e 'POSIX path of thefile'`;
+        const { stdout } = await execAsync(script);
+        if (stdout && stdout.trim()) {
+          inputPath = stdout.trim();
+        }
+      } else {
+        inputPath = await input({ message: 'Enter full path to the JSON export file:' });
+      }
+
+      if (inputPath && inputPath.trim()) {
+         const fileData = await fs.readFile(inputPath.trim(), 'utf-8');
+         const parsedData = JSON.parse(fileData);
+         if (Array.isArray(parsedData)) {
+            for (const chat of parsedData) {
+               if (chat.id && chat.messages) {
+                  await updateChatState(chat.id, { messages: chat.messages });
+               }
+            }
+            console.log(theme.success(`\n✔ Imported ${parsedData.length} chats successfully!\n`));
+         } else {
+            console.log(theme.error(`\n❌ Invalid export file format.\n`));
+         }
+      } else {
+         console.log(theme.dim("Import cancelled.\n"));
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('User cancelled')) {
+         console.log(theme.dim("Import cancelled.\n"));
+      } else {
+         console.log(theme.error(`\n❌ Import failed: ${e.message}\n`));
       }
     }
     return { action: 'continue' };

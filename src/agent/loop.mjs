@@ -61,13 +61,12 @@ export async function startChatLoop() {
     isAutoContinueEnabled: false,
     globalTaskQueue: [],
     isMenuOpen: false,
-    agentPersistentMemory: "",
     currentSpinnerText: '',
     inputPromptHistory: TerminalState.inputPromptHistory,
     screenPrompts: TerminalState.screenPrompts
   };
 
-  state.messages.push({ role: "system", content: await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) });
+  state.messages.push({ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) });
 
   let isThinking = false;
   let currentAbortController = null;
@@ -321,6 +320,7 @@ export async function startChatLoop() {
     if (state.isTeamModeEnabled && typeof query === 'string' && query.trim() !== '') {
       const { runTeamPipeline } = await import('./core/team-pipeline.mjs');
       await runTeamPipeline(query, state, ctx);
+      saveChatHistory(state.chatId, state.messages, state.currentModel);
       continue;
     }
 
@@ -497,31 +497,10 @@ export async function startChatLoop() {
     // --- AUTOMATED RAG PRE-FETCHING ---
     if (typeof query === 'string' && query.trim() !== '') {
       try {
-        const { searchMemory } = await import('./db.mjs');
-        const { queryCodegraph } = await import('../tools/codegraph.mjs');
+        const { getRagContext } = await import('./db.mjs');
         const { PROJECTS_DIR } = await import('../tools/file-system.mjs');
         
-        let prefetchData = "";
-        
-        // 1. Search FTS5 Memory
-        const memResults = searchMemory(query, 3);
-        if (memResults && memResults.length > 0) {
-          prefetchData += "\n--- PRE-FETCHED MEMORY ---\n";
-          prefetchData += memResults.map(r => r.content).join('\n\n');
-        }
-        
-        // 2. Extract potential file names or symbols
-        const words = query.split(/[\s,]+/).filter(w => w.length > 3 && !w.toLowerCase().match(/^(the|and|for|with|that|this|what|how|where|when|please|fix|update|create)$/));
-        if (words.length > 0) {
-          const searchKeyword = words[0];
-          try {
-             const cgResult = await queryCodegraph(searchKeyword, PROJECTS_DIR);
-             if (cgResult && cgResult.trim() && !cgResult.includes("No nodes found") && !cgResult.includes("Error")) {
-                prefetchData += `\n--- PRE-FETCHED CODEGRAPH (Keyword: ${searchKeyword}) ---\n`;
-                prefetchData += cgResult.length > 1500 ? cgResult.substring(0, 1500) + '...[TRUNCATED]' : cgResult; 
-             }
-          } catch(e) {}
-        }
+        const prefetchData = await getRagContext(query, PROJECTS_DIR);
         
         if (prefetchData) {
           userMsgObj.content += `\n\n[SYSTEM AUTO-PREFETCH]\nBased on your query, here is some automatically retrieved context that might help:\n${prefetchData}\n[/SYSTEM AUTO-PREFETCH]`;
@@ -942,7 +921,7 @@ export async function startChatLoop() {
             safeLogMsg(theme.warning("⚠️ The failing message has been removed from memory to prevent a loop."));
           }
 
-          saveChatHistory(state.chatId, state.messages);
+          saveChatHistory(state.chatId, state.messages, state.currentModel);
         } catch (apiErr) {
           if (apiErr.name === 'AbortError' || isInterrupted) {
             safeLogMsg(theme.warning("⚠️ Turn cancelled."));

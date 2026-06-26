@@ -206,44 +206,7 @@ export async function executeTool(toolName, args, ctx) {
     if (records.length === 0) return "No relevant memory records found.";
     return records.map((r, i) => `Result ${i + 1} (Rank ${Math.round(r.rank * 100) / 100}): ${r.content}`).join('\n\n');
   }
-  else if (toolName === "run_doctor_memory") {
-    state.currentSpinnerText = theme.dim(`Running Doctor-Memory co-programmer...`);
-    let instruction = args.instruction;
-    const memoryMode = process.env.MEMORY_MODE || 'both';
 
-    if ((memoryMode === 'both' || memoryMode === 'custom_only') && state.agentPersistentMemory.trim() !== '') {
-      instruction = `[System Memory Context:\n${state.agentPersistentMemory}\n]\n\nUser Task: ${instruction}`;
-    }
-
-    const filesList = args.files || [];
-    const projectsDir = PROJECTS_DIR;
-
-    try {
-      const argsArr = [
-        "uvx", "aider-chat",
-        "--message", instruction,
-        "--yes", "--no-auto-commits",
-        "--model", state.currentModel
-      ];
-
-      if (memoryMode === 'custom_only') {
-        argsArr.push("--chat-history-file", "/dev/null");
-      }
-
-      if (filesList.length > 0) {
-        argsArr.push(...filesList);
-      }
-
-      const { stdout: stdoutText, stderr: stderrText } = await spawnAndCollect(argsArr[0], argsArr.slice(1), { cwd: projectsDir, env: process.env });
-
-      await checkAndInstallMissingDependencies(projectsDir);
-      safeLog(() => console.log(theme.success(`✔ Doctor-Memory completed execution.`)));
-      return `Doctor-Memory Output:\n${stdoutText}\n${stderrText ? 'Doctor-Memory Stderr:\n' + stderrText : ''}`;
-    } catch (err) {
-      safeLog(() => console.log(theme.error(`❌ Doctor-Memory failed.`)));
-      return `Doctor-Memory execution failed: ${err.message}`;
-    }
-  }
   else if (toolName === "run_browser_automation") {
     spinner.stop();
     process.stdin.removeListener("keypress", ctx.preInputCollector);

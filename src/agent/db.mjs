@@ -100,6 +100,10 @@ export async function deleteAllChatThreads() {
   db.prepare(`DELETE FROM checkpoint_writes WHERE thread_id != 'global_state'`).run();
 }
 
+export async function purgeMemory() {
+  db.prepare(`DELETE FROM memory_fts`).run();
+}
+
 // Memory FTS Functions
 export function addMemoryRecord(content) {
   const stmt = db.prepare(`INSERT INTO memory_fts (content, timestamp) VALUES (?, ?)`);
@@ -120,7 +124,32 @@ export function searchMemory(query, limit = 5) {
     
     const ftsQuery = sanitizedQuery.split(/\s+/).map(w => w + '*').join(' OR ');
     return stmt.all(ftsQuery, limit);
-  } catch (err) {
+} catch (err) {
     return [];
   }
+}
+
+export async function getRagContext(query, projectsDir) {
+  let prefetchData = "";
+  try {
+    const memResults = searchMemory(query, 3);
+    if (memResults && memResults.length > 0) {
+      prefetchData += "\n--- PRE-FETCHED MEMORY ---\n";
+      prefetchData += memResults.map(r => r.content).join('\n\n');
+    }
+    
+    const words = query.split(/[\s,]+/).filter(w => w.length > 3 && !w.toLowerCase().match(/^(the|and|for|with|that|this|what|how|where|when|please|fix|update|create)$/));
+    if (words.length > 0) {
+      const searchKeyword = words[0];
+      try {
+         const { queryCodegraph } = await import('../tools/codegraph.mjs');
+         const cgResult = await queryCodegraph(searchKeyword, projectsDir);
+         if (cgResult && cgResult.trim() && !cgResult.includes("No nodes found") && !cgResult.includes("Error")) {
+            prefetchData += `\n--- PRE-FETCHED CODEGRAPH (Keyword: ${searchKeyword}) ---\n`;
+            prefetchData += cgResult.length > 1500 ? cgResult.substring(0, 1500) + '...[TRUNCATED]' : cgResult; 
+         }
+      } catch(e) {}
+    }
+  } catch(e) {}
+  return prefetchData;
 }

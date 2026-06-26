@@ -6,6 +6,8 @@ import { executeTool } from './tool-executor.mjs';
 import { aiToolsConfig } from './ai-tools.mjs';
 import { buildSystemPrompt } from './system-prompt.mjs';
 import { askInputWithSlashCatch } from '../utils/input.mjs';
+import { getRagContext } from '../db.mjs';
+import { PROJECTS_DIR } from '../../tools/file-system.mjs';
 
 /**
  * Runs a task through the Developer -> QA pipeline.
@@ -19,14 +21,23 @@ export async function runTeamPipeline(task, globalState, uiCtx) {
   console.log(theme.info(`\n🚀 Initializing Team Pipeline: Developer & QA Agents for: "${task}"\n`));
 
   // 1. Setup Developer AI Memory
+  let devTaskContent = task;
+  try {
+    const prefetchData = await getRagContext(task, PROJECTS_DIR);
+    if (prefetchData) {
+      devTaskContent += `\n\n[SYSTEM AUTO-PREFETCH]\nBased on your query, here is some automatically retrieved context that might help:\n${prefetchData}\n[/SYSTEM AUTO-PREFETCH]`;
+      console.log(theme.dim(`✔ Pre-fetched Memory & CodeGraph context injected into Developer AI.`));
+    }
+  } catch (e) {}
+
   const devMemory = [
-    { role: "system", content: await buildSystemPrompt(globalState.agentPersistentMemory, globalState.isAutoPromptEnabled) + "\n\nYou are the Developer AI. Your job is to implement the user's task using the available tools." },
-    { role: "user", content: task }
+    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the Developer AI. Your job is to implement the user's task using the available tools." },
+    { role: "user", content: devTaskContent }
   ];
 
   // 2. Setup QA AI Memory
   const qaMemory = [
-    { role: "system", content: await buildSystemPrompt(globalState.agentPersistentMemory, globalState.isAutoPromptEnabled) + "\n\nYou are the QA AI Reviewer. Your job is to review the code changes made by the Developer AI. If you find bugs, you can fix them using tools or provide feedback. If everything is perfect, output exactly 'TASK_PASSED'." },
+    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the QA AI Reviewer. Your job is to review the code changes made by the Developer AI. If you find bugs, you can fix them using tools or provide feedback. If everything is perfect, output exactly 'TASK_PASSED'." },
     { role: "user", content: `The Developer AI has been assigned this task:\n"${task}"\nReview their implementation once they are done.` }
   ];
 
@@ -88,8 +99,30 @@ export async function runTeamPipeline(task, globalState, uiCtx) {
     }
   }
 
+  // --- Prepare QA Auto-Impact Analysis ---
+  let qaInstruction = "The Developer AI has finished its execution. Please review the codebase using your tools to ensure the task was completed correctly.";
+  try {
+    if (globalState.lastAiEditedFiles && globalState.lastAiEditedFiles.length > 0) {
+      const { impactCodegraph } = await import('../../tools/codegraph.mjs');
+      let impactData = "";
+      for (const file of globalState.lastAiEditedFiles.slice(-3)) {
+        try {
+          const res = await impactCodegraph(file, PROJECTS_DIR);
+          if (res && !res.includes("Error") && !res.includes("No impact")) {
+            impactData += `\nImpact for ${file}:\n${res}\n`;
+          }
+        } catch (e) {}
+      }
+      if (impactData) {
+        qaInstruction += `\n\n[SYSTEM AUTO-IMPACT]\nThe Developer recently edited the following files. Here is the CodeGraph impact analysis showing what other parts of the system might be broken by these changes:\n\`\`\`\n${impactData}\n\`\`\`\nPlease check these impacted files to ensure nothing was broken.\n[/SYSTEM AUTO-IMPACT]\n`;
+      }
+    }
+  } catch (e) {}
+
+  qaInstruction += "\nIf there are issues, fix them or report them. If it is fully correct, reply with TASK_PASSED.";
+  
   // Pass summary to QA
-  qaMemory.push({ role: "user", content: "The Developer AI has finished its execution. Please review the codebase using your tools to ensure the task was completed correctly. If there are issues, fix them or report them. If it is fully correct, reply with TASK_PASSED." });
+  qaMemory.push({ role: "user", content: qaInstruction });
 
   // --- Phase 2: QA Review ---
   console.log(theme.info(`\n🕵️‍♀️ QA AI is now reviewing the changes...\n`));

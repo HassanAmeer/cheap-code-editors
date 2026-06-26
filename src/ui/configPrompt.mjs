@@ -2,6 +2,7 @@ import { select, input } from '@inquirer/prompts';
 import { theme, getPromptTheme } from './theme.mjs';
 import { loadUserKeys, saveUserKeys } from '../providers/keys.mjs';
 import { clearClientCache } from '../providers/index.mjs';
+import { purgeMemory } from '../agent/db.mjs';
 import chalk from 'chalk';
 
 const PROVIDERS = [
@@ -27,6 +28,7 @@ export async function handleConfigPrompt() {
           { name: chalk.gray('✦ Configure a Provider API Key'), value: 'set' },
           { name: chalk.gray('⌕ Show Configured API Keys'), value: 'show' },
           { name: chalk.gray('🗑 Clear a Provider API Key'), value: 'clear' },
+          { name: chalk.gray('␡ Purge Agent SQLite Knowledge Base (FTS5)'), value: 'purge' },
           { name: chalk.gray('✕ Back to Main Menu'), value: 'back' }
         ],
         theme: getPromptTheme()
@@ -127,6 +129,25 @@ export async function handleConfigPrompt() {
           await saveUserKeys(userKeys);
           clearClientCache();
           console.log(theme.success(`✔ Custom API key for ${providerToClear} deleted. Reverted to default.\n`));
+        }
+      }
+
+      if (choice === 'purge') {
+        const confirm = await select({
+          message: theme.error('WARNING: This will permanently delete all factual/project memory from the AI SQLite FTS5 database. Are you sure?'),
+          choices: [
+            { name: 'Yes, Purge Memory', value: true },
+            { name: 'No, Cancel', value: false }
+          ],
+          theme: getPromptTheme()
+        });
+        if (confirm) {
+          try {
+            await purgeMemory();
+            console.log(theme.success('\n✔ AI Knowledge Base (SQLite FTS5) has been fully purged!\n'));
+          } catch (e) {
+            console.log(theme.error(`\n❌ Failed to purge memory: ${e.message}\n`));
+          }
         }
       }
     } catch (e) {

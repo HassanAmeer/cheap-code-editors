@@ -4,9 +4,38 @@ import {
   getAllChatThreads, deleteChatThread, deleteAllChatThreads 
 } from './db.mjs';
 
-export async function saveChatHistory(chatId, messages) {
+import { getClientForModel } from '../providers/index.mjs';
+
+export async function saveChatHistory(chatId, messages, currentModel = 'bigpickle') {
     try {
-        await updateChatState(chatId, { messages });
+        let finalMessages = messages;
+        if (messages.length > 20) {
+           console.log(`\n\x1b[2mThis session has a large history (${messages.length} messages). Summarizing oldest messages to save context in background...\x1b[0m`);
+           try {
+             const aiClient = getClientForModel(currentModel);
+             const messagesToSummarize = messages.slice(1, messages.length - 10);
+             const summaryPrompt = "Please provide a concise summary of the following conversation history so far. Focus on key decisions, code written, and current status:\n\n" + 
+                 messagesToSummarize.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n\n');
+             
+             // Run async without blocking UI
+             aiClient.chat.completions.create({
+                 model: currentModel,
+                 messages: [{ role: 'user', content: summaryPrompt }]
+             }).then(async (summaryResponse) => {
+                 const content = summaryResponse.choices[0].message.content;
+                 const summaryContent = `[SYSTEM SUMMARY OF PREVIOUS CONVERSATION]\n${content}\n[/SYSTEM SUMMARY]`;
+                 const newMessages = [
+                     messages[0],
+                     { role: 'system', content: summaryContent },
+                     ...messages.slice(messages.length - 10)
+                 ];
+                 await updateChatState(chatId, { messages: newMessages });
+                 console.log(`\x1b[32m✔ Summarized history successfully in background!\x1b[0m`);
+             }).catch(() => {});
+           } catch (err) {}
+        }
+
+        await updateChatState(chatId, { messages: finalMessages });
     } catch (err) { }
 }
 
