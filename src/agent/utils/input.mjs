@@ -375,13 +375,30 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
       }
 
-      // Shift+Tab → cycle team mode
-      if (key && ((key.name === 'tab' && key.shift) || key.name === 'backtab' || char === '\x1b[Z')) {
+      // Shift+Tab or `` → cycle team mode
+      if ((key && ((key.name === 'tab' && key.shift) || key.name === 'backtab')) || char === '\x1b[Z' || (char === '``' || buffer === '``')) {
+        if (buffer === '``') { buffer = ''; cursorPos = 0; }
         if (state) {
           state.teamModeIndex = ((state.teamModeIndex || 1) % 7) + 1;
           renderLine();
         }
         return;
+      }
+
+      // Ctrl+L → Open model selector
+      if (key && key.ctrl && key.name === 'l') {
+         buffer = '/model';
+         cursorPos = buffer.length;
+         pendingSubmit = true;
+         handler(); // Trigger submit
+         return;
+      }
+
+      // Ctrl+Z → Suspend
+      if (key && key.ctrl && key.name === 'z') {
+         renderLineSync(); restore(); process.stdout.write('\n'); 
+         process.kill(process.pid, 'SIGTSTP'); 
+         return;
       }
 
       // Ctrl+P → cycle active models
@@ -467,13 +484,32 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         }
       }
 
-      // Left Arrow / Word Jump Left
-      if (key && ((key.name === 'left') || (key.name === 'b' && key.meta))) {
-        if (key.ctrl || key.meta) {
-          while (cursorPos > 0 && buffer[cursorPos - 1] === ' ') cursorPos--;
-          while (cursorPos > 0 && buffer[cursorPos - 1] !== ' ') cursorPos--;
-        } else if (key.name === 'left' && cursorPos > 0) { cursorPos--; }
+      // Ctrl+A / Home
+      if ((key && key.name === 'a' && key.ctrl) || (key && key.name === 'home')) {
+        cursorPos = 0;
+        renderLine();
+        return;
+      }
+
+      // Ctrl+E / End
+      if ((key && key.name === 'e' && key.ctrl) || (key && key.name === 'end')) {
+        cursorPos = buffer.length;
+        renderLine();
+        return;
+      }
+
+      // Left Arrow / Ctrl+B
+      if (key && ((key.name === 'left') || (key.name === 'b' && key.ctrl))) {
+        if (cursorPos > 0) cursorPos--;
         renderLine(); return;
+      }
+
+      // Option+Left / Option+B (Word Jump Left)
+      if (key && ((key.name === 'left' && key.meta) || (key.name === 'b' && key.meta))) {
+         while (cursorPos > 0 && buffer[cursorPos - 1] === ' ') cursorPos--;
+         while (cursorPos > 0 && buffer[cursorPos - 1] !== ' ') cursorPos--;
+         renderLine();
+         return;
       }
 
       // Up Arrow
@@ -499,29 +535,67 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         return;
       }
 
-      // Right Arrow
-      if (key && ((key.name === 'right') || (key.name === 'f' && key.meta))) {
-        if (key.ctrl || key.meta) {
-          while (cursorPos < buffer.length && buffer[cursorPos] === ' ') cursorPos++;
-          while (cursorPos < buffer.length && buffer[cursorPos] !== ' ') cursorPos++;
-        } else if (key.name === 'right' && cursorPos < buffer.length) { cursorPos++; }
+      // Right Arrow / Ctrl+F
+      if (key && ((key.name === 'right') || (key.name === 'f' && key.ctrl))) {
+        if (cursorPos < buffer.length) cursorPos++;
         renderLine(); return;
       }
 
-      // Clear entire line
+      // Option+Right / Option+F (Word Jump Right)
+      if (key && ((key.name === 'right' && key.meta) || (key.name === 'f' && key.meta))) {
+         while (cursorPos < buffer.length && buffer[cursorPos] === ' ') cursorPos++;
+         while (cursorPos < buffer.length && buffer[cursorPos] !== ' ') cursorPos++;
+         renderLine();
+         return;
+      }
+
+      // Ctrl+U (Delete to start of line)
       if (key && key.name === 'u' && key.ctrl) {
-        buffer = '';
+        TerminalState.yankBuffer = buffer.slice(0, cursorPos);
+        buffer = buffer.slice(cursorPos);
         cursorPos = 0;
         renderLine();
         return;
       }
 
-      // Delete Word Backwards
+      // Ctrl+K (Delete to end of line)
+      if (key && key.name === 'k' && key.ctrl) {
+         TerminalState.yankBuffer = buffer.slice(cursorPos);
+         buffer = buffer.slice(0, cursorPos);
+         renderLine();
+         return;
+      }
+
+      // Ctrl+Y (Paste Yanked)
+      if (key && key.name === 'y' && key.ctrl) {
+         if (TerminalState.yankBuffer) {
+            buffer = buffer.slice(0, cursorPos) + TerminalState.yankBuffer + buffer.slice(cursorPos);
+            cursorPos += TerminalState.yankBuffer.length;
+            renderLine();
+         }
+         return;
+      }
+
+      // Option+D / Option+Delete (Delete word forward)
+      if (key && ((key.name === 'd' && key.meta) || (key.name === 'delete' && key.meta))) {
+         if (cursorPos < buffer.length) {
+            let endPos = cursorPos;
+            while (endPos < buffer.length && buffer[endPos] === ' ') endPos++;
+            while (endPos < buffer.length && buffer[endPos] !== ' ') endPos++;
+            TerminalState.yankBuffer = buffer.slice(cursorPos, endPos);
+            buffer = buffer.slice(0, cursorPos) + buffer.slice(endPos);
+            renderLine();
+         }
+         return;
+      }
+
+      // Delete Word Backwards (Ctrl+W)
       if (key && ((key.name === 'backspace' && (key.meta || key.ctrl)) || (key.name === 'w' && key.ctrl))) {
         if (cursorPos > 0) {
           let startPos = cursorPos;
           while (startPos > 0 && buffer[startPos - 1] === ' ') startPos--;
           while (startPos > 0 && buffer[startPos - 1] !== ' ') startPos--;
+          TerminalState.yankBuffer = buffer.slice(startPos, cursorPos);
           buffer = buffer.slice(0, startPos) + buffer.slice(cursorPos);
           cursorPos = startPos;
           renderLine();
@@ -537,6 +611,19 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
           renderLine();
         }
         return;
+      }
+
+      // Ctrl+D (Exit if empty or Delete forward)
+      if (key && key.name === 'd' && key.ctrl) {
+         if (buffer.length === 0) {
+            renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
+         } else {
+            if (cursorPos < buffer.length) {
+              buffer = buffer.slice(0, cursorPos) + buffer.slice(cursorPos + 1);
+              renderLine();
+            }
+            return;
+         }
       }
 
       // Delete

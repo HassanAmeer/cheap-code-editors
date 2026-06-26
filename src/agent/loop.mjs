@@ -287,6 +287,35 @@ export async function startChatLoop() {
 
     if (!query) continue;
 
+    // Handle Bash commands natively
+    if (query.startsWith('!')) {
+      const isExcluded = query.startsWith('!!');
+      const cmdStr = isExcluded ? query.substring(2).trim() : query.substring(1).trim();
+      if (cmdStr) {
+        console.log(theme.dim(`\n$ ${cmdStr}`));
+        try {
+          const { execSync } = await import('child_process');
+          const output = execSync(cmdStr, { encoding: 'utf-8', stdio: 'pipe' });
+          console.log(output);
+          if (!isExcluded) {
+            state.messages.push({ role: 'user', content: query });
+            state.messages.push({ role: 'assistant', content: `[Bash Command Executed Successfully]\n\`\`\`\n${output}\n\`\`\`` });
+            saveChatHistory(state.chatId, state.messages, state.currentModel);
+          }
+        } catch (err) {
+          console.log(theme.error(`Command failed: ${err.message}`));
+          if (err.stdout) console.log(err.stdout.toString());
+          if (err.stderr) console.log(theme.error(err.stderr.toString()));
+          if (!isExcluded) {
+            state.messages.push({ role: 'user', content: query });
+            state.messages.push({ role: 'assistant', content: `[Bash Command Failed]\n\`\`\`\n${err.message}\n\`\`\`` });
+            saveChatHistory(state.chatId, state.messages, state.currentModel);
+          }
+        }
+      }
+      continue;
+    }
+
     // Check Slash Commands
     const ctx = {
       state,

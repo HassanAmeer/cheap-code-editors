@@ -25,6 +25,7 @@ export const TerminalState = {
   screenPrompts: [],
   activeMouseClickHandler: null,
   ignoreWriteNewlines: false,
+  yankBuffer: "",
 };
 
 export let spinnerClearHook = null;
