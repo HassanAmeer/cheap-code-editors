@@ -169,18 +169,6 @@ export const aiToolsConfig = [
   {
     type: "function",
     function: {
-      name: "rewrite_memory",
-      description: "Completely overwrite your persistent memory. Use this to delete outdated rules or reorganize memory.",
-      parameters: {
-        type: "object",
-        properties: { new_memory_text: { type: "string", description: "The full new memory content that will replace the old one." } },
-        required: ["new_memory_text"]
-      }
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "run_doctor_memory",
       description: "Ask Doctor-Memory (the co-programmer AI) to review code, search repository context, or plan/audit bug fixes across files.",
       parameters: {
@@ -274,6 +262,34 @@ export const aiToolsConfig = [
       parameters: {
         type: "object",
         properties: {}
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "impact_codegraph",
+      description: "Perform impact analysis on a symbol or file before refactoring to see what will break.",
+      parameters: {
+        type: "object",
+        properties: {
+          nodeName: { type: "string" }
+        },
+        required: ["nodeName"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_memory",
+      description: "Search the agent's long-term SQLite memory for past fixes or knowledge.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string" }
+        },
+        required: ["query"]
       }
     }
   }

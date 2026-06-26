@@ -1,8 +1,15 @@
 import fs from 'fs/promises';
 import * as diff from 'diff';
 import chalk from 'chalk';
-import { getSafePath } from './file-system.mjs';
+import { exec } from 'child_process';
+import { getSafePath, PROJECTS_DIR } from './file-system.mjs';
 import { theme } from '../ui/theme.mjs';
+
+function triggerCodegraphSync() {
+  exec('npx codegraph sync', { cwd: PROJECTS_DIR }, (err) => {
+    // Ignore errors silently for background sync
+  });
+}
 
 const activeLocks = new Set();
 
@@ -149,6 +156,7 @@ export async function editFile(relativePath, newContent, saveSnapshot = true) {
 
       printColorfulDiff(relativePath, oldContent, newContent);
       await fs.writeFile(filePath, newContent, 'utf8');
+      triggerCodegraphSync();
       return `Successfully edited file: ${relativePath}`;
     } catch (error) {
       return `Error editing file: ${error.message}`;
@@ -220,6 +228,7 @@ export async function replaceLines(relativePath, startLine, endLine, newContent,
 
       const modifiedContent = lines.join('\n');
       await fs.writeFile(filePath, modifiedContent, 'utf8');
+      triggerCodegraphSync();
 
       printColorfulDiff(relativePath, oldContent, modifiedContent);
       return `Successfully replaced lines ${startLine}-${endLine} in ${relativePath}.`;

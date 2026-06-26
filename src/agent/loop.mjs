@@ -25,7 +25,6 @@ marked.setOptions({
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
 import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting } from './history.mjs';
-import { loadPersistentMemory } from '../../custom-memory/memory1.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -62,7 +61,7 @@ export async function startChatLoop() {
     isAutoContinueEnabled: false,
     globalTaskQueue: [],
     isMenuOpen: false,
-    agentPersistentMemory: await loadPersistentMemory(),
+    agentPersistentMemory: "",
     currentSpinnerText: '',
     inputPromptHistory: TerminalState.inputPromptHistory,
     screenPrompts: TerminalState.screenPrompts
@@ -311,6 +310,12 @@ export async function startChatLoop() {
     }
     if (slashResult.action === 'done') {
       query = slashResult.query;
+    }
+    if (slashResult.action === 'resume') {
+      state.chatId = slashResult.chatId;
+      state.messages = slashResult.messages || [];
+      console.log(theme.success(`\n✔ Resumed session: ${state.chatId}\n`));
+      continue;
     }
 
     if (state.isTeamModeEnabled && typeof query === 'string' && query.trim() !== '') {

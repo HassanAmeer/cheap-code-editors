@@ -20,6 +20,14 @@ export const db = new Database(dbPath);
 const checkpointer = new SqliteSaver(db);
 checkpointer.setup(); // Creates tables if they don't exist
 
+// Initialize FTS5 Memory Table
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+    content,
+    timestamp UNINDEXED
+  );
+`);
+
 const StateAnnotation = {
   messages: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
   currentModel: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'bigpickle' },
@@ -90,4 +98,29 @@ export async function deleteAllChatThreads() {
   db.prepare(`DELETE FROM checkpoints WHERE thread_id != 'global_state'`).run();
   db.prepare(`DELETE FROM checkpoint_blobs WHERE thread_id != 'global_state'`).run();
   db.prepare(`DELETE FROM checkpoint_writes WHERE thread_id != 'global_state'`).run();
+}
+
+// Memory FTS Functions
+export function addMemoryRecord(content) {
+  const stmt = db.prepare(`INSERT INTO memory_fts (content, timestamp) VALUES (?, ?)`);
+  stmt.run(content, Date.now());
+}
+
+export function searchMemory(query, limit = 5) {
+  try {
+    const stmt = db.prepare(`
+      SELECT content, timestamp, rank 
+      FROM memory_fts 
+      WHERE memory_fts MATCH ? 
+      ORDER BY rank 
+      LIMIT ?
+    `);
+    const sanitizedQuery = query.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+    if (!sanitizedQuery) return [];
+    
+    const ftsQuery = sanitizedQuery.split(/\s+/).map(w => w + '*').join(' OR ');
+    return stmt.all(ftsQuery, limit);
+  } catch (err) {
+    return [];
+  }
 }

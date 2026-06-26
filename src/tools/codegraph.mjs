@@ -18,3 +18,7 @@ export async function viewCodegraphNode(nodeName, cwdRelative = '.') {
 export async function initCodegraph(cwdRelative = '.') {
   return await runTerminalCommand(`npx codegraph init`, cwdRelative);
 }
+
+export async function impactCodegraph(nodeName, cwdRelative = '.') {
+  return await runTerminalCommand(`npx codegraph impact "${nodeName.replace(/"/g, '\\"')}"`, cwdRelative);
+}

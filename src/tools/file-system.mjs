@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import chalk from 'chalk';
+import { exec } from 'child_process';
 import { theme } from '../ui/theme.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,10 @@ export async function createFile(relativePath, content) {
 
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, 'utf8');
+    
+    // Auto-sync CodeGraph
+    exec('npx codegraph sync', { cwd: PROJECTS_DIR }, () => {});
+    
     return `Successfully created file: ${relativePath}`;
   } catch (error) {
     return `Error creating file: ${error.message}`;

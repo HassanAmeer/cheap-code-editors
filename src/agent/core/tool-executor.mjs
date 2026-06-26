@@ -12,13 +12,14 @@ import { editFile, undoAction, replaceLines, markFileAsCreated } from '../../too
 import { searchWebWithFreeSearchAPI } from '../../searches/whole-web-search/api.mjs';
 import { fetchWebsiteDirectly } from '../../searches/duckduck-web-search/scraper.mjs';
 import { readSkillContent } from '../../tools/skills.mjs';
-import { queryCodegraph, exploreCodegraph, viewCodegraphNode, initCodegraph } from '../../tools/codegraph.mjs';
+import { queryCodegraph, exploreCodegraph, viewCodegraphNode, initCodegraph, impactCodegraph } from '../../tools/codegraph.mjs';
 import { runAutoWebAgent } from '../../playwright-web-agent-settings/index.mjs';
 import { playNotification } from '../../ui/sound.mjs';
 import { raceAbort, spawnAndCollect, checkAndInstallMissingDependencies } from '../utils/process.mjs';
 import { confirmWebAgentStart } from '../utils/permissions.mjs';
 import { buildSystemPrompt } from './system-prompt.mjs';
 import { getClientForModel } from '../../providers/index.mjs';
+import { addMemoryRecord, searchMemory } from '../db.mjs';
 
 function isActionSensitive(toolName, args) {
   if (toolName === "run_terminal_command") {
@@ -186,25 +187,24 @@ export async function executeTool(toolName, args, ctx) {
     safeLog(() => console.log(theme.dim(`✔ Initialized CodeGraph`)));
     return res;
   }
-  else if (toolName === "update_memory") {
-    state.agentPersistentMemory += `\n- ${args.memory_text}`;
-    if (state.agentPersistentMemory.length > 50000) {
-      state.agentPersistentMemory = "...[TRUNCATED_OLD_MEMORY]\n" + state.agentPersistentMemory.substring(state.agentPersistentMemory.length - 48000);
-    }
-    await savePersistentMemory(state.agentPersistentMemory);
-    state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
-    safeLog(() => console.log(theme.success(`✔ Memory updated: ${args.memory_text}`)));
-    return "Memory successfully updated. It has been injected into your system prompt.";
+  else if (toolName === "impact_codegraph") {
+    state.currentSpinnerText = theme.dim(`Running Impact Analysis: ${args.nodeName}`);
+    const res = await raceAbort(impactCodegraph(args.nodeName, PROJECTS_DIR), abortController.signal);
+    safeLog(() => console.log(theme.dim(`✔ Completed Impact Analysis`)));
+    return res;
   }
-  else if (toolName === "rewrite_memory") {
-    state.agentPersistentMemory = args.new_memory_text;
-    if (state.agentPersistentMemory.length > 50000) {
-      state.agentPersistentMemory = "...[TRUNCATED_OLD_MEMORY]\n" + state.agentPersistentMemory.substring(state.agentPersistentMemory.length - 48000);
-    }
-    await savePersistentMemory(state.agentPersistentMemory);
-    state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
-    safeLog(() => console.log(theme.success(`✔ Memory completely rewritten.`)));
-    return "Memory successfully rewritten. The new memory has been injected into your system prompt.";
+  else if (toolName === "update_memory") {
+    state.currentSpinnerText = theme.dim(`Updating SQLite Knowledge Base...`);
+    addMemoryRecord(args.memory_text);
+    safeLog(() => console.log(theme.success(`✔ Memory added to SQLite FTS5: ${args.memory_text}`)));
+    return "Memory successfully added to the persistent knowledge base.";
+  }
+  else if (toolName === "search_memory") {
+    state.currentSpinnerText = theme.dim(`Searching memory for: ${args.query}`);
+    const records = searchMemory(args.query);
+    safeLog(() => console.log(theme.dim(`✔ Searched memory for: ${args.query}`)));
+    if (records.length === 0) return "No relevant memory records found.";
+    return records.map((r, i) => `Result ${i + 1} (Rank ${Math.round(r.rank * 100) / 100}): ${r.content}`).join('\n\n');
   }
   else if (toolName === "run_doctor_memory") {
     state.currentSpinnerText = theme.dim(`Running Doctor-Memory co-programmer...`);

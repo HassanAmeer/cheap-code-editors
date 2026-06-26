@@ -17,7 +17,7 @@ import { getSoundEnabled, setSoundEnabled, playNotification } from '../../ui/sou
 import { getClientForModel, getModelsGroupedByProvider } from '../../providers/index.mjs';
 import { saveAutoPermissionSetting, saveAutoPromptSetting, saveLastModel, deleteAllChats, saveChatHistory, getAvailableChats, deleteChat, loadChatHistory } from '../history.mjs';
 import { printLogo } from '../../ui/logo.mjs';
-import { savePersistentMemory } from '../../../custom-memory/memory1.mjs';
+import { getAllChatThreads } from '../db.mjs';
 import { gridPrompt } from '../../ui/gridPrompt.mjs';
 import { undoAction } from '../../tools/editor.mjs';
 import { webAgent } from '../../playwright-web-agent-settings/index.mjs';
@@ -595,6 +595,40 @@ Instructions for you (The Architect):
       spinner.succeed(theme.success('✔ Workspace tree and Auto-Skills synced successfully!'));
     } catch (err) {
       if (spinner) spinner.fail(theme.error(`❌ Failed to refresh workspace: ${err.message}`));
+    }
+    return { action: 'continue' };
+  }
+  
+  if (lowerCmd === '/history') {
+    try {
+      const threads = await getAllChatThreads();
+      if (threads.length === 0) {
+        console.log(theme.info("No past chat sessions found in SQLite."));
+      } else {
+        console.log(theme.info("\n📚 Past Chat Sessions:\n"));
+        threads.forEach(t => console.log(theme.dim(`- ${t}`)));
+        console.log(theme.info("\nUse /resume <id> to switch to one of these sessions."));
+      }
+    } catch (err) {
+      console.log(theme.error(`❌ Failed to fetch history: ${err.message}`));
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd.startsWith('/resume ') || lowerCmd === '/resume') {
+    let targetId = cmdStr.slice(8).trim();
+    if (!targetId) {
+      targetId = await input({ message: 'Enter the session ID to resume:', theme: getPromptTheme() });
+    }
+    if (targetId) {
+      const threads = await getAllChatThreads();
+      if (!threads.includes(targetId)) {
+        console.log(theme.error(`❌ Session ID not found: ${targetId}`));
+      } else {
+        const { getChatState } = await import('../db.mjs');
+        const pastState = await getChatState(targetId);
+        return { action: 'resume', chatId: targetId, messages: pastState?.messages || [] };
+      }
     }
     return { action: 'continue' };
   }
