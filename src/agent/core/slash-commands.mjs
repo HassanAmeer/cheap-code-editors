@@ -115,6 +115,10 @@ export async function executeSlashCommand(cmdInput, ctx) {
 
       const autoContinueMaxTimeName = `⟲ auto retries  - Auto Continue Max Retries: ${state.autoContinueMaxRetries}`;
 
+      const thinkingHiddenChoiceName = state.isThinkingHidden
+        ? '👁 hide_thinking  - Hide AI Thinking Blocks: ON'
+        : '👁 hide_thinking  - Hide AI Thinking Blocks: OFF';
+
       const rawChoices = [
         { name: '⊘ clear         - Clear terminal and preserve memory', value: '/clear' },
         { name: '⎇ new           - Clear terminal + start new session', value: '/new' },
@@ -146,6 +150,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: autoPermChoiceName, value: '/permission' },
         { name: autoPromptChoiceName, value: '/autoprompt' },
         { name: soundChoiceName, value: '/sound' },
+        { name: thinkingHiddenChoiceName, value: '/hide_thinking' },
         { name: '✖ delete_chats  - Delete all saved chats', value: '/delete_chats' },
         { name: '⎋ exit          - Exit the CLI', value: '/exit' },
         { name: '✕ Cancel', value: 'cancel' }
@@ -661,6 +666,17 @@ Instructions for you (The Architect):
       playNotification();
     } else {
       console.log(theme.success(`✔ Sound Notifications: OFF 🔇\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/hide_thinking') {
+    state.isThinkingHidden = !state.isThinkingHidden;
+    const { saveThinkingHiddenSetting } = await import('../history.mjs');
+    await saveThinkingHiddenSetting(state.isThinkingHidden);
+    if (state.isThinkingHidden) {
+      console.log(theme.success(`✔ Hide AI Thinking Blocks: ON 🙈\n`) + theme.dim(`  <thinking>...</thinking> blocks will be stripped from responses.\n`));
+    } else {
+      console.log(theme.success(`✔ Hide AI Thinking Blocks: OFF 👁\n`) + theme.dim(`  <thinking>...</thinking> blocks will be shown dimmed in responses.\n`));
     }
     return { action: 'continue' };
   }

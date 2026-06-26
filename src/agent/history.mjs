@@ -149,3 +149,16 @@ export async function getAutoContinueMaxTimeSetting() {
         return state.autoContinueMaxRetries !== undefined && state.autoContinueMaxRetries !== null ? state.autoContinueMaxRetries : 3;
     } catch (err) { return 3; }
 }
+
+export async function saveThinkingHiddenSetting(enabled) {
+    try {
+        await updateGlobalState({ isThinkingHidden: enabled });
+    } catch (err) { }
+}
+
+export async function getThinkingHiddenSetting() {
+    try {
+        const state = await getGlobalState();
+        return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : true;
+    } catch (err) { return true; }
+}

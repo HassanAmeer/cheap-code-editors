@@ -24,7 +24,7 @@ marked.setOptions({
 });
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting } from './history.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -44,6 +44,7 @@ export async function startChatLoop() {
     autoPermissionMode: await getAutoPermissionSetting(),
     isAutoPromptEnabled: await getAutoPromptSetting(),
     autoContinueMaxRetries: await getAutoContinueMaxTimeSetting(),
+    isThinkingHidden: await getThinkingHiddenSetting(),
     messages: [],
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
@@ -724,16 +725,27 @@ export async function startChatLoop() {
             eraseSticky();
 
             if (responseMessage.content) {
-              let rendered = marked(responseMessage.content);
-              rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
-              rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
-              rendered = rendered.replace(/<thought>/g, '\x1b[90m');
-              rendered = rendered.replace(/<\/thought>/g, '\x1b[0m');
+              let rendered = responseMessage.content;
 
-              let openT = rendered.lastIndexOf('\x1b[90m');
-              let closeT = rendered.lastIndexOf('\x1b[0m');
-              if (openT > closeT) {
-                rendered += '\x1b[0m';
+              if (state.isThinkingHidden) {
+                // Strip thinking blocks entirely
+                rendered = rendered.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+                rendered = rendered.replace(/<thought>[\s\S]*?<\/thought>/g, '');
+              }
+
+              rendered = marked(rendered);
+
+              if (!state.isThinkingHidden) {
+                rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
+                rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
+                rendered = rendered.replace(/<thought>/g, '\x1b[90m');
+                rendered = rendered.replace(/<\/thought>/g, '\x1b[0m');
+
+                let openT = rendered.lastIndexOf('\x1b[90m');
+                let closeT = rendered.lastIndexOf('\x1b[0m');
+                if (openT > closeT) {
+                  rendered += '\x1b[0m';
+                }
               }
 
               const fullRendered = rendered.trimEnd();

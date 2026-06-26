@@ -55,7 +55,8 @@ const StateAnnotation = {
   isSoundEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
   currentTheme: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'cheap' },
   deletedSkills: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
-  autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 }
+  autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 },
+  isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true }
 };
 
 const builder = new StateGraph({ channels: StateAnnotation })
