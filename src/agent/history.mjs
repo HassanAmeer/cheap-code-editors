@@ -1,41 +1,33 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const CHATS_DIR = path.join(__dirname, '../../chats-history');
-
-let settingsLock = Promise.resolve();
+import { 
+  getGlobalState, updateGlobalState, 
+  getChatState, updateChatState, 
+  getAllChatThreads, deleteChatThread, deleteAllChatThreads 
+} from './db.mjs';
 
 export async function saveChatHistory(chatId, messages) {
     try {
-        await fs.mkdir(CHATS_DIR, { recursive: true });
-        const filePath = path.join(CHATS_DIR, `${chatId}.json`);
-        await fs.writeFile(filePath, JSON.stringify(messages, null, 2), 'utf8');
+        await updateChatState(chatId, { messages });
     } catch (err) { }
 }
 
 export async function loadChatHistory(chatId) {
     try {
-        const filePath = path.join(CHATS_DIR, `${chatId}.json`);
-        const content = await fs.readFile(filePath, 'utf8');
-        return JSON.parse(content);
+        const state = await getChatState(chatId);
+        return state ? state.messages : null;
     } catch (err) { return null; }
 }
 
 export async function getAvailableChats() {
     try {
-        const files = await fs.readdir(CHATS_DIR);
-        const jsonFiles = files.filter(f => f.endsWith('.json') && f !== 'settings.json');
-
+        const threadIds = await getAllChatThreads();
         const chats = [];
-        for (const f of jsonFiles) {
-            const id = f.replace('.json', '');
+
+        for (const id of threadIds) {
             try {
-                const content = await fs.readFile(path.join(CHATS_DIR, f), 'utf8');
-                const messages = JSON.parse(content);
+                const state = await getChatState(id);
+                if (!state || !state.messages || state.messages.length === 0) continue;
                 
+                const messages = state.messages;
                 let title = 'Empty Chat';
                 const firstUser = messages.find(m => m.role === 'user');
                 
@@ -46,7 +38,6 @@ export async function getAvailableChats() {
                     if (textContent.length > 80) title += '...';
                 }
                 
-                // Extract timestamp from filename and format it
                 const tsMatch = id.match(/_(\d+)/);
                 if (tsMatch && tsMatch[1]) {
                     const date = new Date(parseInt(tsMatch[1]));
@@ -63,106 +54,56 @@ export async function getAvailableChats() {
 
 export async function deleteAllChats() {
     try {
-        const files = await fs.readdir(CHATS_DIR);
-        for (const f of files) {
-            if (f.endsWith('.json') && f !== 'settings.json') {
-                try {
-                    await fs.unlink(path.join(CHATS_DIR, f));
-                } catch (e) {} // Prevent single file error from halting the loop
-            }
-        }
+        await deleteAllChatThreads();
         return true;
     } catch (err) { return false; }
 }
 
 export async function deleteChat(chatId) {
     try {
-        const filePath = path.join(CHATS_DIR, `${chatId}.json`);
-        await fs.unlink(filePath);
+        await deleteChatThread(chatId);
         return true;
     } catch (err) { return false; }
 }
 
 export async function saveLastModel(model) {
-    settingsLock = settingsLock.then(async () => {
-        try {
-            await fs.mkdir(CHATS_DIR, { recursive: true });
-            const filePath = path.join(CHATS_DIR, 'settings.json');
-            let settings = {};
-            try {
-                const content = await fs.readFile(filePath, 'utf8');
-                settings = JSON.parse(content);
-            } catch (e) {}
-            settings.lastModel = model;
-            await fs.writeFile(filePath, JSON.stringify(settings, null, 2), 'utf8');
-        } catch (err) { }
-    });
-    return settingsLock;
+    try {
+        await updateGlobalState({ currentModel: model });
+    } catch (err) { }
 }
 
 export async function getLastModel() {
     try {
-        const filePath = path.join(CHATS_DIR, 'settings.json');
-        const content = await fs.readFile(filePath, 'utf8');
-        const settings = JSON.parse(content);
-        return settings.lastModel || null;
+        const state = await getGlobalState();
+        return state.currentModel || null;
     } catch (err) { return null; }
 }
 
 export async function saveAutoPermissionSetting(enabled) {
-    settingsLock = settingsLock.then(async () => {
-        try {
-            await fs.mkdir(CHATS_DIR, { recursive: true });
-            const filePath = path.join(CHATS_DIR, 'settings.json');
-            let settings = {};
-            try {
-                const content = await fs.readFile(filePath, 'utf8');
-                settings = JSON.parse(content);
-            } catch (e) {}
-            settings.autoPermissionMode = enabled;
-            await fs.writeFile(filePath, JSON.stringify(settings, null, 2), 'utf8');
-        } catch (err) { }
-    });
-    return settingsLock;
+    try {
+        await updateGlobalState({ autoPermissionMode: enabled });
+    } catch (err) { }
 }
 
 export async function getAutoPermissionSetting() {
     try {
-        const filePath = path.join(CHATS_DIR, 'settings.json');
-        const content = await fs.readFile(filePath, 'utf8');
-        const settings = JSON.parse(content);
-        if (settings.autoPermissionMode !== undefined) {
-            return settings.autoPermissionMode;
+        const state = await getGlobalState();
+        if (state.autoPermissionMode !== undefined && state.autoPermissionMode !== null) {
+            return state.autoPermissionMode;
         }
-        if (settings.autoPermission !== undefined) {
-            return settings.autoPermission ? 'auto' : 'default';
-        }
-        return 'plan'; // default to 'plan'
+        return 'plan'; // default
     } catch (err) { return 'plan'; }
 }
 
 export async function saveAutoPromptSetting(enabled) {
-    settingsLock = settingsLock.then(async () => {
-        try {
-            await fs.mkdir(CHATS_DIR, { recursive: true });
-            const filePath = path.join(CHATS_DIR, 'settings.json');
-            let settings = {};
-            try {
-                const content = await fs.readFile(filePath, 'utf8');
-                settings = JSON.parse(content);
-            } catch (e) {}
-            settings.autoPrompt = enabled;
-            await fs.writeFile(filePath, JSON.stringify(settings, null, 2), 'utf8');
-        } catch (err) { }
-    });
-    return settingsLock;
+    try {
+        await updateGlobalState({ isAutoPromptEnabled: enabled });
+    } catch (err) { }
 }
 
 export async function getAutoPromptSetting() {
     try {
-        const filePath = path.join(CHATS_DIR, 'settings.json');
-        const content = await fs.readFile(filePath, 'utf8');
-        const settings = JSON.parse(content);
-        return settings.autoPrompt !== undefined ? settings.autoPrompt : false;
+        const state = await getGlobalState();
+        return state.isAutoPromptEnabled !== undefined && state.isAutoPromptEnabled !== null ? state.isAutoPromptEnabled : false;
     } catch (err) { return false; }
 }

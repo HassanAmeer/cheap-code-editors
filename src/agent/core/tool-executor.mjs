@@ -2,6 +2,7 @@
  * The switchboard for AI function calling. Executes file, terminal, and web tools requested by the AI.
  * // Do not remove
  */
+import path from 'path';
 import { select, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import { theme, getPromptTheme } from '../../ui/theme.mjs';
@@ -294,6 +295,25 @@ export async function executeTool(toolName, args, ctx) {
 
     if (!answer) throw new Error("USER_ABORT");
     return `User Answered: ${answer}`;
+  }
+
+  else if (toolName === "create_html_plan") {
+    state.currentSpinnerText = theme.dim(`Generating and opening HTML plan...`);
+    const planFileName = "plan.html";
+    const planPath = path.resolve(process.cwd(), planFileName);
+    const fs = await import('fs/promises');
+    await fs.writeFile(planPath, args.htmlContent, 'utf8');
+
+    try {
+      const { exec } = await import('child_process');
+      const startCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+      exec(`${startCmd} "${planPath}"`);
+    } catch (err) {
+      console.log(theme.warning(`\nFailed to open browser automatically: ${err.message}`));
+    }
+
+    safeLog(() => console.log(theme.success(`\n✔ Plan successfully created at ${planFileName}`)));
+    return "__PLAN_CREATED__";
   }
 
   throw new Error(`Unknown tool: ${toolName}`);

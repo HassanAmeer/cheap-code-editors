@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { getWorkspaceTree, PROJECTS_DIR } from '../../tools/file-system.mjs';
 import { detectAndGenerateAutoSkills, getAvailableSkills } from '../../tools/skills.mjs';
 
-export async function buildSystemPrompt(agentMemory = "", isAutoPromptEnabled = false, autoPermissionMode = 'sensitive', currentModel = 'bigpickle') {
+export async function buildSystemPrompt(agentMemory = "", isAutoPromptEnabled = false, autoPermissionMode = 'sensitive', currentModel = 'bigpickle', teamModeIndex = 2) {
   const tree = await getWorkspaceTree();
   const cliName = process.env.CLINAME || 'cheap';
   const cliCommand = process.env.CLICALLBYCOMMAND || 'cheap';
@@ -64,6 +64,14 @@ ${isAutoPromptEnabled
 - Then, write a highly detailed, step-by-step, optimized implementation prompt tailored for Doctor-Memory. Optimize your prompt based on the strengths of the ${doctorModel} model.
 - Finally, pass your optimized prompt into the 'run_doctor_memory' tool to execute the code changes.`
       : `- You MUST pass the user's EXACT, raw request directly into the 'run_doctor_memory' tool without modifying, rewriting, or expanding it. DO NOT generate an optimized prompt.`}
+
+${teamModeIndex === 1 ? `TEAM MODE: PLANNER
+You are currently operating in "Plan Mode" (Mode 1).
+When the user gives a request:
+1. THINK & REVIEW: First, review the workspace using your file reading tools (build a code graph in your mind). If the user is asking about an out-of-context or entirely new project, you may skip reviewing the current workspace.
+2. CLARIFY: If you have any confusion or need more data to create a perfect plan, ask the user clarifying questions immediately.
+3. GENERATE PLAN: Once you fully understand the requirement, generate a detailed execution plan formatted as a beautiful HTML file.
+4. USE TOOL: You MUST use the 'create_html_plan' tool to save this HTML plan and automatically open it in the user's browser. Once you call 'create_html_plan', STOP your response. Do not ask for confirmation after calling the tool.` : `TEAM MODE: BUILDER (Mode 2)`}
 
 TRACKING RECENT CHANGES:
 Doctor-Memory automatically makes Git commits for every code change it applies. If you ever lose track of what was just changed, or need to review the latest updates before planning the next step, use the 'run_terminal_command' tool to run 'git log -n 2' or 'git diff HEAD~1'. This gives you absolute context of the latest codebase state.

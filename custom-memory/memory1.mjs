@@ -1,16 +1,8 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const MEMORY_FILE = path.join(__dirname, 'memory1.json');
+import { getGlobalState, updateGlobalState } from '../src/agent/db.mjs';
 
 export async function savePersistentMemory(memoryText) {
     try {
-        const tmpFile = MEMORY_FILE + '.tmp';
-        await fs.writeFile(tmpFile, JSON.stringify({ memory: memoryText }, null, 2), 'utf8');
-        await fs.rename(tmpFile, MEMORY_FILE);
+        await updateGlobalState({ agentPersistentMemory: memoryText });
     } catch (err) {
         console.error("Failed to save persistent memory:", err);
     }
@@ -18,13 +10,9 @@ export async function savePersistentMemory(memoryText) {
 
 export async function loadPersistentMemory() {
     try {
-        const content = await fs.readFile(MEMORY_FILE, 'utf8');
-        const data = JSON.parse(content);
-        return data.memory || "";
+        const state = await getGlobalState();
+        return state.agentPersistentMemory || "";
     } catch (err) {
-        if (err.name === 'SyntaxError') {
-            try { await fs.copyFile(MEMORY_FILE, MEMORY_FILE + '.bak'); } catch {}
-        }
         return "";
     }
 }

@@ -57,6 +57,7 @@ export async function startChatLoop() {
     testRetries: 0,
     selectedFilePath: null,
     preInputBuffer: "",
+    teamModeIndex: 2, // Default to Builder mode
     isTeamModeEnabled: false,
     isAutoContinueEnabled: false,
     globalTaskQueue: [],
@@ -149,6 +150,35 @@ export async function startChatLoop() {
     const columns = process.stdout.columns || 80;
     const maxLen = columns - 1;
 
+    // Mode segment: 7 circles representing the team mode
+    const modeIdx = state.teamModeIndex || 1;
+    let circles = '';
+    for (let i = 1; i <= 7; i++) {
+      circles += (i === modeIdx) ? '●' : '○';
+    }
+    const modeNames = [
+      'plan',
+      'builder',
+      'fixer',
+      'reviewer',
+      'plan+build',
+      'plan+build+fix',
+      'plan+build+fix+review'
+    ];
+    const currentModeName = modeNames[modeIdx - 1] || 'plan';
+    const modeColor = theme.accent ? theme.accent : chalk.cyan;
+    const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
+
+    // Permission mode segment
+    const permMode = state.autoPermissionMode || 'plan';
+    const permColor = permMode === 'yolo' ? theme.error : (permMode === 'default' ? theme.success : theme.warning);
+    const permModeStyled = permColor ? permColor(permMode) : permMode;
+    const permSeg = `${theme.dim('permissions:')} ${permModeStyled}`;
+
+    // Model segment: "model_name → ctrl+p" (model in accent)
+    const modelName = state.currentModel || 'unknown';
+    const modelSeg = `${theme.accent(modelName)} ${theme.dim('→ ctrl+p')}`;
+
     // Context bar (exact cheap format: ████████████████ 0% ctx)
     const BAR_WIDTH = 16;
     const tokensUsed = Object.values(state.modelTokenUsage || {}).reduce((a, b) => a + b, 0);
@@ -159,16 +189,6 @@ export async function startChatLoop() {
     const barEmpty = theme.dim('░'.repeat(BAR_WIDTH - filled));
     const pctStr = theme.accent(`${pct}%`);
     const contextSeg = `${barFilled}${barEmpty} ${pctStr} ${theme.dim('ctx')}`;
-
-    // Permission mode segment: "default → shift+tab" (with semantic coloring matching cheap)
-    const permMode = state.autoPermissionMode || 'plan';
-    const permColor = permMode === 'yolo' ? theme.error : (permMode === 'default' ? theme.success : theme.warning);
-    const permModeStyled = permColor ? permColor(permMode) : permMode;
-    const permSeg = `${permModeStyled} ${theme.dim('→ shift+tab')}`;
-
-    // Model segment: "model_name → ctrl+p" (model in accent)
-    const modelName = state.currentModel || 'unknown';
-    const modelSeg = `${theme.accent(modelName)} ${theme.dim('→ ctrl+p')}`;
 
     // Phase segment: "phase:explore"
     const phaseSeg = `${theme.dim('phase:')}${theme.accent('explore')}`;
@@ -181,7 +201,7 @@ export async function startChatLoop() {
     const sep = ` ${theme.dim('·')} `;
 
     // Assemble segments
-    const segs = [permSeg, modelSeg, contextSeg, phaseSeg];
+    const segs = [modeSeg, permSeg, modelSeg, contextSeg, phaseSeg];
     const segTexts = segs.join(sep);
 
     // Accurately measure the visible length by stripping ANSI escape codes
@@ -813,6 +833,54 @@ export async function startChatLoop() {
                 name: toolName,
                 content: toolResult
               });
+
+              if (toolResult === "__PLAN_CREATED__") {
+                spinner.stop();
+                process.stdin.removeListener("keypress", preInputCollector);
+                
+                try {
+                  const { select, input } = await import('@inquirer/prompts');
+                  const { getPromptTheme } = await import('../ui/theme.mjs');
+                  const chalk = (await import('chalk')).default;
+                  
+                  const action = await select({
+                    message: 'Please review the generated plan in your browser:',
+                    choices: [
+                      { name: chalk.green('Yes (Proceed to Builder)'), value: 'proceed' },
+                      { name: chalk.yellow('Custom Message (Modify Plan)'), value: 'custom' },
+                      { name: chalk.red('No (Cancel)'), value: 'cancel' }
+                    ],
+                    theme: getPromptTheme()
+                  });
+
+                  if (action === 'proceed') {
+                    state.teamModeIndex = 2; // Switch to Builder mode automatically
+                    state.globalTaskQueue.push("Plan approved. Proceed with building.");
+                    turnIsActive = false;
+                  } else if (action === 'cancel') {
+                    console.log(chalk.red("Plan cancelled."));
+                    turnIsActive = false;
+                  } else if (action === 'custom') {
+                    const customMsg = await input({
+                      message: 'What changes would you like to make?',
+                      theme: getPromptTheme()
+                    });
+                    if (customMsg.trim()) {
+                      state.globalTaskQueue.push(customMsg.trim());
+                      turnIsActive = false;
+                    } else {
+                      console.log(chalk.red("No changes provided. Plan cancelled."));
+                      turnIsActive = false;
+                    }
+                  }
+                } catch (e) {
+                  // User aborted the prompt
+                  turnIsActive = false;
+                }
+                
+                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                process.stdin.on("keypress", preInputCollector);
+              }
             }
           } else {
             if (state.isAutoContinueEnabled && response.choices[0].finish_reason === 'length') {

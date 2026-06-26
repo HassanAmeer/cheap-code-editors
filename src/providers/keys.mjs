@@ -121,13 +121,12 @@ export const providerKeys = JSON.parse(JSON.stringify(defaultKeys));
 // Asynchronously load user configuration at startup
 let userKeys = {};
 try {
-  const data = await fs.promises.readFile(KEYS_FILE, 'utf8');
-  userKeys = JSON.parse(data);
-} catch (e) {
-  if (e.name === 'SyntaxError') {
-    console.error("Warning: keys.json is corrupted. Backing up and starting fresh to prevent data loss.");
-    try { await fs.promises.copyFile(KEYS_FILE, KEYS_FILE + '.bak'); } catch { }
+  const state = await getGlobalState();
+  if (state && state.userKeys) {
+    userKeys = state.userKeys;
   }
+} catch (e) {
+  console.error("Warning: Failed to load userKeys from LangGraph SQLite.");
 }
 
 // Override default values with user keys if present
@@ -145,8 +144,7 @@ for (const provider of Object.keys(userKeys)) {
 // Save user keys dynamically and update memory bindings
 export async function saveUserKeys(updatedKeysConfig) {
   try {
-    await fs.promises.mkdir(path.dirname(KEYS_FILE), { recursive: true });
-    await fs.promises.writeFile(KEYS_FILE, JSON.stringify(updatedKeysConfig, null, 2), 'utf8');
+    await updateGlobalState({ userKeys: updatedKeysConfig });
 
     // In-memory sync: reset to defaults first, then apply updated keys
     for (const provider of Object.keys(providerKeys)) {
@@ -171,17 +169,9 @@ export async function saveUserKeys(updatedKeysConfig) {
 // Load user keys helper
 export async function loadUserKeys() {
   try {
-    if (fs.existsSync(KEYS_FILE)) {
-      const data = await fs.promises.readFile(KEYS_FILE, 'utf8');
-      if (data.trim() === '') return {};
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        return null; // Null indicates corruption
-      }
-    }
+    const state = await getGlobalState();
+    return state.userKeys || {};
   } catch (e) {
-    // Return empty if file not found
+    return {};
   }
-  return {};
 }

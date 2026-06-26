@@ -7,42 +7,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BELL_PATH = path.join(__dirname, '../../assets/bell.wav');
-const SETTINGS_FILE = path.join(__dirname, '../../chats-history/settings.json');
+import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
-// Load initial sound preference asynchronously from settings (default: ON)
+// Load initial sound preference asynchronously from state (default: ON)
 let soundEnabled = true;
 try {
-  const content = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-  const settings = JSON.parse(content);
-  if (typeof settings.sound === 'boolean') {
-    soundEnabled = settings.sound;
+  const state = await getGlobalState();
+  if (state.isSoundEnabled !== undefined && state.isSoundEnabled !== null) {
+    soundEnabled = state.isSoundEnabled;
   }
 } catch (e) {
-  if (e.name === 'SyntaxError') {
-    try { await fs.promises.copyFile(SETTINGS_FILE, SETTINGS_FILE + '.bak'); } catch { }
-  }
+  // Ignore
 }
 
 export function getSoundEnabled() {
   return soundEnabled;
 }
 
-let soundLock = Promise.resolve();
-
 export async function setSoundEnabled(enabled) {
   soundEnabled = enabled;
-  soundLock = soundLock.then(async () => {
-    try {
-      await fs.promises.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-      let settings = {};
-      try {
-        const content = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-        settings = JSON.parse(content);
-      } catch (e) { }
-      settings.sound = enabled;
-      await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
-    } catch (e) { }
-  });
+  try {
+    await updateGlobalState({ isSoundEnabled: enabled });
+  } catch (e) { }
 }
 
 /**

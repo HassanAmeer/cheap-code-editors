@@ -375,25 +375,10 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
       }
 
-      // Shift+Tab → cycle permission mode
+      // Shift+Tab → cycle team mode
       if (key && ((key.name === 'tab' && key.shift) || key.name === 'backtab' || char === '\x1b[Z')) {
         if (state) {
-          const modes = ['ask', 'sensitive', 'full'];
-          let idx = modes.indexOf(state.autoPermissionMode);
-          if (idx === -1) idx = 1; // default to sensitive
-          idx = (idx + 1) % modes.length;
-          state.autoPermissionMode = modes[idx];
-
-          saveAutoPermissionSetting(state.autoPermissionMode).catch(() => { });
-
-          if (buildSystemPromptFn) {
-            buildSystemPromptFn(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel)
-              .then(prompt => {
-                if (state.messages && state.messages.length > 0) {
-                  state.messages[0].content = prompt;
-                }
-              }).catch(() => { });
-          }
+          state.teamModeIndex = ((state.teamModeIndex || 1) % 7) + 1;
           renderLine();
         }
         return;

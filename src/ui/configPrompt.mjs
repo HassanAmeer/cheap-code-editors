@@ -51,10 +51,6 @@ export async function handleConfigPrompt() {
         }
 
         const userKeys = await loadUserKeys();
-        if (userKeys === null) {
-          console.log(theme.error(`\n❌ Error: keys.json is corrupted. Please manually fix or delete it before configuring API keys.\n`));
-          continue;
-        }
         
         const existingKey = userKeys[provider]?.apiKey || '';
         
@@ -88,10 +84,6 @@ export async function handleConfigPrompt() {
 
       if (choice === 'show') {
         const userKeys = await loadUserKeys();
-        if (userKeys === null) {
-          console.log(theme.error(`\n❌ Error: keys.json is corrupted.\n`));
-          continue;
-        }
         console.log(theme.info('\n--- Configured API Keys ---'));
         let hasKeys = false;
         for (const p of PROVIDERS) {
@@ -111,10 +103,6 @@ export async function handleConfigPrompt() {
 
       if (choice === 'clear') {
         const userKeys = await loadUserKeys();
-        if (userKeys === null) {
-          console.log(theme.error(`\n❌ Error: keys.json is corrupted.\n`));
-          continue;
-        }
         const activeChoices = PROVIDERS.filter(p => userKeys[p.value]?.apiKey).map(p => ({
           name: p.name,
           value: p.value

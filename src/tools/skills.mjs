@@ -54,12 +54,9 @@ async function exists(p) {
 
 async function writeSkill(skillName, name, description, content) {
   try {
-    const deletedPath = path.join(getSkillsDir(), '.deleted-skills.json');
-    if (await exists(deletedPath)) {
-      const delContent = await fs.readFile(deletedPath, 'utf8');
-      const deletedSkills = JSON.parse(delContent);
-      if (deletedSkills.includes(skillName)) return; // Don't regenerate deleted auto-skills
-    }
+    const state = await getGlobalState();
+    const deletedSkills = state.deletedSkills || [];
+    if (deletedSkills.includes(skillName)) return; // Don't regenerate deleted auto-skills
   } catch (e) {}
 
   const skillPath = getSafeSkillPath(skillName);
@@ -255,6 +252,8 @@ ${content}
   return { success: false, path: mdPath };
 }
 
+import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
+
 // Remove a skill folder
 export async function removeSkill(skillName) {
   const skillPath = getSafeSkillPath(skillName);
@@ -263,16 +262,14 @@ export async function removeSkill(skillName) {
     
     // If it's an auto skill, record its deletion so it doesn't regenerate
     if (AUTO_SKILLS.has(skillName)) {
-      const deletedPath = path.join(getSkillsDir(), '.deleted-skills.json');
-      let deletedSkills = [];
       try {
-        const delContent = await fs.readFile(deletedPath, 'utf8');
-        deletedSkills = JSON.parse(delContent);
+        const state = await getGlobalState();
+        const deletedSkills = state.deletedSkills || [];
+        if (!deletedSkills.includes(skillName)) {
+          deletedSkills.push(skillName);
+          await updateGlobalState({ deletedSkills });
+        }
       } catch (e) {}
-      if (!deletedSkills.includes(skillName)) {
-        deletedSkills.push(skillName);
-        await fs.writeFile(deletedPath, JSON.stringify(deletedSkills), 'utf8');
-      }
     }
     return true;
   }

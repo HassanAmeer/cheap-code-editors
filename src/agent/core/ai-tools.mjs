@@ -21,6 +21,20 @@ export const aiToolsConfig = [
   {
     type: "function",
     function: {
+      name: "create_html_plan",
+      description: "Generate an HTML plan document and automatically open it in the user's browser for review. Call this tool ONLY when you are in Plan Mode and have gathered all required details.",
+      parameters: {
+        type: "object",
+        properties: {
+          htmlContent: { type: "string", description: "The full HTML string including styles and content of the plan." }
+        },
+        required: ["htmlContent"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "create_file",
       description: "Create a new file.",
       parameters: {

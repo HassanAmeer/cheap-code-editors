@@ -3,13 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { select } from '@inquirer/prompts';
+import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SETTINGS_FILE = path.join(__dirname, '../../chats-history/settings.json');
 const THEMES_DIR = path.join(__dirname, '../../themes-cheap');
-
-let themeLock = Promise.resolve();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JSON Theme Engine (ported from cheap CLI)
@@ -333,18 +331,9 @@ export async function handleThemePrompt(state = null) {
 
     if (selected && selected !== 'cancel') {
       setCLITheme(selected);
-      themeLock = themeLock.then(async () => {
-        try {
-          await fs.promises.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-          let settings = {};
-          try {
-            const content = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-            settings = JSON.parse(content);
-          } catch (e) {}
-          settings.theme = selected;
-          await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
-        } catch (err) {}
-      });
+      try {
+        await updateGlobalState({ currentTheme: selected });
+      } catch (err) {}
 
       const label = CHEAP_THEMES.find(t => t.name === selected)?.label || selected;
       return { action: 'redraw', message: theme.success(`✔ Theme updated to: ${label}\n`) };
@@ -360,16 +349,12 @@ export async function handleThemePrompt(state = null) {
 // Load saved theme at startup
 // ─────────────────────────────────────────────────────────────────────────────
 try {
-  const content = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-  const settings = JSON.parse(content);
-  if (settings.theme) {
-    setCLITheme(settings.theme);
+  const state = await getGlobalState();
+  if (state && state.currentTheme) {
+    setCLITheme(state.currentTheme);
   } else {
     setCLITheme('cheap');
   }
 } catch (e) {
-  if (e.name === 'SyntaxError') {
-    try { await fs.promises.copyFile(SETTINGS_FILE, SETTINGS_FILE + '.bak'); } catch {}
-  }
   setCLITheme('cheap');
 }
