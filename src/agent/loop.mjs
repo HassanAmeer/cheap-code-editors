@@ -697,7 +697,7 @@ export async function startChatLoop() {
           const aiClient = getClientForModel(effectiveModel);
 
           let isStreaming = true;
-          const responseMessage = { role: "assistant", content: "", tool_calls: [] };
+          const responseMessage = { role: "assistant", content: "" };
           let currentInputTokens = 0;
           let currentOutputTokens = 0;
           let totalTokens = 0;
@@ -838,21 +838,22 @@ export async function startChatLoop() {
             }
 
             if (delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index;
-                if (!responseMessage.tool_calls[idx]) {
-                  responseMessage.tool_calls[idx] = {
-                    id: tc.id || "",
-                    type: tc.type || "function",
-                    function: { name: tc.function?.name || "", arguments: "" }
-                  };
-                } else {
-                  if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
-                  if (tc.function?.name) responseMessage.tool_calls[idx].function.name += tc.function.name;
-                  if (tc.function?.arguments) responseMessage.tool_calls[idx].function.arguments += tc.function.arguments;
-                }
-              }
-            }
+               if (!responseMessage.tool_calls) responseMessage.tool_calls = [];
+               for (const tc of delta.tool_calls) {
+                 const idx = tc.index;
+                 if (!responseMessage.tool_calls[idx]) {
+                   responseMessage.tool_calls[idx] = {
+                     id: tc.id || "",
+                     type: tc.type || "function",
+                     function: { name: tc.function?.name || "", arguments: "" }
+                   };
+                 } else {
+                   if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
+                   if (tc.function?.name) responseMessage.tool_calls[idx].function.name += tc.function.name;
+                   if (tc.function?.arguments) responseMessage.tool_calls[idx].function.arguments += tc.function.arguments;
+                 }
+               }
+             }
           }
 
           isStreaming = false;
@@ -861,6 +862,8 @@ export async function startChatLoop() {
           eraseSticky();
 
           process.stdout.write('\n\n');
+
+          state.messages.push(responseMessage);
 
           if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
             for (const toolCall of responseMessage.tool_calls) {
@@ -960,9 +963,25 @@ export async function startChatLoop() {
               }
             }
           } else {
-            if (state.isAutoContinueEnabled && response.choices[0].finish_reason === 'length') {
-              safeLogMsg(theme.info("\n🔄 Token limit reached. Auto-Continue Mode is ON. Resuming automatically..."));
-              state.messages.push({ role: "user", content: "Continue generating from where you left off." });
+            if (response.choices[0].finish_reason === 'length') {
+              // Token limit reached — check if max retries applies
+              if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
+                autoContinueCurrentRetries++;
+                safeLogMsg(theme.info(`\n🔄 Token limit reached. Auto-Continue (${autoContinueCurrentRetries}/${state.autoContinueMaxRetries}). Resuming...`));
+                state.messages.push({ role: "user", content: "Continue generating from where you left off." });
+              } else if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries >= state.autoContinueMaxRetries) {
+                // Limit reached — stop
+                autoContinueCurrentRetries = 0;
+                safeLogMsg(theme.warning(`\n⛔ Auto-Continue limit reached (${state.autoContinueMaxRetries}/${state.autoContinueMaxRetries}). Stopped. Please enter a new task.\n`));
+                turnIsActive = false;
+                import('../ui/sound.mjs').then(m => m.playNotification());
+              } else if (state.isAutoContinueEnabled) {
+                safeLogMsg(theme.info("\n🔄 Token limit reached. Infinite Auto-Continue is ON. Resuming..."));
+                state.messages.push({ role: "user", content: "Continue generating from where you left off." });
+              } else {
+                turnIsActive = false;
+                import('../ui/sound.mjs').then(m => m.playNotification());
+              }
             } else {
               turnIsActive = false;
               import('../ui/sound.mjs').then(m => m.playNotification());
@@ -987,6 +1006,12 @@ export async function startChatLoop() {
               autoContinueCurrentRetries++;
               safeLogMsg(theme.info(`🔄 Auto-Retry on Error (${autoContinueCurrentRetries}/${state.autoContinueMaxRetries}). Feeding error back to AI...`));
               state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
+            } else if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries >= state.autoContinueMaxRetries) {
+              // Max retries reached — stop and wait for new user input
+              autoContinueCurrentRetries = 0;
+              safeLogMsg(theme.warning(`\n⛔ Auto-Retry limit reached (${state.autoContinueMaxRetries}/${state.autoContinueMaxRetries}). Stopped. Please enter a new task.\n`));
+              state.messages = state.messages.slice(0, prevMessagesLength);
+              turnIsActive = false;
             } else if (state.isAutoContinueEnabled) {
               safeLogMsg(theme.info("🔄 Infinite Auto-Continue Mode is ON. Feeding error back to AI..."));
               state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });

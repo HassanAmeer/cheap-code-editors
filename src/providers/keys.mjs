@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,7 +127,10 @@ try {
     userKeys = state.userKeys;
   }
 } catch (e) {
-  console.error("Warning: Failed to load userKeys from LangGraph SQLite.");
+  // Silently ignore — this is expected on first run (no global_state row yet)
+  if (process.env.DEBUG === 'true') {
+    console.error("Warning: Failed to load userKeys from LangGraph SQLite.", e.message);
+  }
 }
 
 // Override default values with user keys if present

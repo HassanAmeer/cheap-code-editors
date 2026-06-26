@@ -140,7 +140,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '⍻ test_ai       - Test Current AI Model', value: '/test_ai' },
         { name: '⎘ attach        - Attach an image or file', value: '/attach' },
         { name: '⎘ attach_remove - Remove attached image or file', value: '/attach_remove' },
-        { name: '◷ history       - Last chats memory', value: '/history' },
+        { name: '◷ history       - Last chats memory (sessions)', value: '/history' },
         { name: '⇪ export        - Export Chat History (JSON & HTML)', value: '/export' },
         { name: '⇘ import        - Import Chat History (JSON)', value: '/import' },
         { name: '⌨ hotkeys        - Show all keyboard shortcuts', value: '/hotkeys' },
@@ -218,16 +218,16 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
-        { key: 'researcher',          label: 'Researcher',         icon: '🔍' },
-        { key: 'system_agent',        label: 'System Agent',       icon: '⚙️ ' },
-        { key: 'plan',                label: 'Plan',               icon: '📋' },
-        { key: 'builder',             label: 'Builder',            icon: '🔨' },
-        { key: 'fixer',               label: 'Fixer',              icon: '🔧' },
-        { key: 'reviewer',            label: 'Reviewer',           icon: '🔍' },
-        { key: 'web_search',          label: 'Web Search Agent',   icon: '🌐' },
+        { key: 'researcher', label: 'Researcher', icon: '🔍' },
+        { key: 'system_agent', label: 'System Agent', icon: '⚙️ ' },
+        { key: 'plan', label: 'Plan', icon: '📋' },
+        { key: 'builder', label: 'Builder', icon: '🔨' },
+        { key: 'fixer', label: 'Fixer', icon: '🔧' },
+        { key: 'reviewer', label: 'Reviewer', icon: '🔍' },
+        { key: 'web_search', label: 'Web Search Agent', icon: '🌐' },
       ];
 
-      // Current saved roles
+      // Current saved roless
       const savedRoles = state.modelRoles || {};
 
       console.log(theme.info('\n⊕ Model Roles Assignment\n'));
@@ -369,7 +369,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
       }
 
       console.log(theme.info("\n🔍 Starting AI Analysis..."));
-      
+
       state.messages.push({
         role: "user",
         content: `[TEST AI MODE]\nThe user has requested the following test/debug task: "${userTestReq}".\nPlease review the project using CodeGraph, identify logical errors, syntax issues, or bugs related to this request. Generate a plan and fix them using your native editing tools.`
@@ -673,22 +673,7 @@ Instructions for you (The Architect):
     }
     return { action: 'continue' };
   }
-  
-  if (lowerCmd === '/history') {
-    try {
-      const threads = await getAllChatThreads();
-      if (threads.length === 0) {
-        console.log(theme.info("No past chat sessions found in SQLite."));
-      } else {
-        console.log(theme.info("\n📚 Past Chat Sessions:\n"));
-        threads.forEach(t => console.log(theme.dim(`- ${t}`)));
-        console.log(theme.info("\nUse /resume <id> to switch to one of these sessions."));
-      }
-    } catch (err) {
-      console.log(theme.error(`❌ Failed to fetch history: ${err.message}`));
-    }
-    return { action: 'continue' };
-  }
+
 
   if (lowerCmd.startsWith('/resume ') || lowerCmd === '/resume') {
     let targetId = cmdStr.slice(8).trim();
@@ -703,9 +688,9 @@ Instructions for you (The Architect):
         const { getChatState, updateChatState } = await import('../db.mjs');
         const pastState = await getChatState(targetId);
         let messages = pastState?.messages || [];
-        
+
         // History summarization is now automatically handled in background by history.mjs
-        
+
         return { action: 'resume', chatId: targetId, messages: messages };
       }
     }
@@ -802,10 +787,10 @@ Instructions for you (The Architect):
     currentVal++;
     if (currentVal > 10) currentVal = 0;
     state.autoContinueMaxRetries = currentVal;
-    
-    const { saveAutoContinueMaxTimeSetting } = await import('./history.mjs');
+
+    const { saveAutoContinueMaxTimeSetting } = await import('../history.mjs');
     await saveAutoContinueMaxTimeSetting(currentVal);
-    
+
     return { action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) };
   }
   if (lowerCmd === '/delete_chats') {
@@ -1096,28 +1081,28 @@ Extensions
       const threadIds = await getAllChatThreads();
       const exportData = [];
       for (const id of threadIds) {
-         const msgs = await getChatState(id);
-         if (msgs && msgs.length > 0) {
-            exportData.push({ id, messages: msgs });
-         }
+        const msgs = await loadChatHistory(id);
+        if (msgs && msgs.length > 0) {
+          exportData.push({ id, messages: msgs });
+        }
       }
-      
+
       const ts = Date.now();
       const downloadsPath = path.join(os.homedir(), 'Downloads');
-      
+
       const jsonPath = path.join(downloadsPath, `cli_chats_export_${ts}.json`);
       await fs.writeFile(jsonPath, JSON.stringify(exportData, null, 2));
 
       let htmlContent = `<html><head><title>CLI Chat History Export</title><style>body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: #fff; } .chat { border: 1px solid #444; margin-bottom: 20px; padding: 15px; border-radius: 8px; } .msg { margin: 10px 0; } .role-user { color: #5ccfe6; } .role-assistant { color: #a2d92a; } pre { background: #000; padding: 10px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }</style></head><body><h1>CLI Chat History Export</h1>`;
-      
+
       for (const chat of exportData) {
-         htmlContent += `<div class="chat"><h2>Chat ID: ${chat.id}</h2>`;
-         for (const msg of chat.messages) {
-            if (msg.role !== 'system') {
-               htmlContent += `<div class="msg"><strong class="role-${msg.role}">${msg.role.toUpperCase()}:</strong> <pre>${typeof msg.content === 'string' ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Complex Data'}</pre></div>`;
-            }
-         }
-         htmlContent += `</div>`;
+        htmlContent += `<div class="chat"><h2>Chat ID: ${chat.id}</h2>`;
+        for (const msg of chat.messages) {
+          if (msg.role !== 'system') {
+            htmlContent += `<div class="msg"><strong class="role-${msg.role}">${msg.role.toUpperCase()}:</strong> <pre>${typeof msg.content === 'string' ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Complex Data'}</pre></div>`;
+          }
+        }
+        htmlContent += `</div>`;
       }
       htmlContent += `</body></html>`;
 
@@ -1150,26 +1135,26 @@ Extensions
       }
 
       if (inputPath && inputPath.trim()) {
-         const fileData = await fs.readFile(inputPath.trim(), 'utf-8');
-         const parsedData = JSON.parse(fileData);
-         if (Array.isArray(parsedData)) {
-            for (const chat of parsedData) {
-               if (chat.id && chat.messages) {
-                  await updateChatState(chat.id, { messages: chat.messages });
-               }
+        const fileData = await fs.readFile(inputPath.trim(), 'utf-8');
+        const parsedData = JSON.parse(fileData);
+        if (Array.isArray(parsedData)) {
+          for (const chat of parsedData) {
+            if (chat.id && chat.messages) {
+              await updateChatState(chat.id, { messages: chat.messages });
             }
-            console.log(theme.success(`\n✔ Imported ${parsedData.length} chats successfully!\n`));
-         } else {
-            console.log(theme.error(`\n❌ Invalid export file format.\n`));
-         }
+          }
+          console.log(theme.success(`\n✔ Imported ${parsedData.length} chats successfully!\n`));
+        } else {
+          console.log(theme.error(`\n❌ Invalid export file format.\n`));
+        }
       } else {
-         console.log(theme.dim("Import cancelled.\n"));
+        console.log(theme.dim("Import cancelled.\n"));
       }
     } catch (e) {
       if (e.message && e.message.includes('User cancelled')) {
-         console.log(theme.dim("Import cancelled.\n"));
+        console.log(theme.dim("Import cancelled.\n"));
       } else {
-         console.log(theme.error(`\n❌ Import failed: ${e.message}\n`));
+        console.log(theme.error(`\n❌ Import failed: ${e.message}\n`));
       }
     }
     return { action: 'continue' };

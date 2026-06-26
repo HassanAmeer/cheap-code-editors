@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const dataDir = path.join(__dirname, '../../data');
 if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.join(dataDir, 'cli_data.db');
@@ -20,6 +20,21 @@ if (typeof process !== "undefined" && process.versions && process.versions.bun) 
   // Bun environment
   const { Database: BunDatabase } = await import("bun:sqlite");
   dbInstance = new BunDatabase(dbPath);
+
+  // Monkey-patch prepare to wrap Statement's get method for better-sqlite3 compatibility
+  const originalPrepare = dbInstance.prepare;
+  dbInstance.prepare = function (sql, ...args) {
+    const stmt = originalPrepare.call(this, sql, ...args);
+    if (stmt) {
+      const originalGet = stmt.get;
+      stmt.get = function (...getArgs) {
+        const res = originalGet.call(this, ...getArgs);
+        return res === null ? undefined : res;
+      };
+    }
+    return stmt;
+  };
+
   // Monkey-patch .pragma for better-sqlite3 compatibility
   dbInstance.pragma = function (str) {
     return this.query(`PRAGMA ${str}`).all();
@@ -34,7 +49,7 @@ export const db = dbInstance;
 
 // Initialize the checkpointer
 const checkpointer = new SqliteSaver(db);
-checkpointer.setup(); // Creates tables if they don't exist
+await checkpointer.setup(); // Creates tables if they don't exist
 
 // Initialize FTS5 Memory Table
 db.exec(`
@@ -78,9 +93,9 @@ export async function updateGlobalState(updates) {
   const config = { configurable: { thread_id: 'global_state' } };
   const currentState = await memoryApp.getState(config);
   if (!currentState || !currentState.values) {
-     await memoryApp.invoke(updates, config);
+    await memoryApp.invoke(updates, config);
   } else {
-     await memoryApp.updateState(config, updates);
+    await memoryApp.updateState(config, updates);
   }
 }
 
@@ -95,9 +110,9 @@ export async function updateChatState(chatId, updates) {
   const config = { configurable: { thread_id: chatId } };
   const currentState = await memoryApp.getState(config);
   if (!currentState || !currentState.values) {
-     await memoryApp.invoke(updates, config);
+    await memoryApp.invoke(updates, config);
   } else {
-     await memoryApp.updateState(config, updates);
+    await memoryApp.updateState(config, updates);
   }
 }
 
@@ -109,14 +124,12 @@ export async function getAllChatThreads() {
 
 export async function deleteChatThread(chatId) {
   db.prepare(`DELETE FROM checkpoints WHERE thread_id = ?`).run(chatId);
-  db.prepare(`DELETE FROM checkpoint_blobs WHERE thread_id = ?`).run(chatId);
-  db.prepare(`DELETE FROM checkpoint_writes WHERE thread_id = ?`).run(chatId);
+  db.prepare(`DELETE FROM writes WHERE thread_id = ?`).run(chatId);
 }
 
 export async function deleteAllChatThreads() {
   db.prepare(`DELETE FROM checkpoints WHERE thread_id != 'global_state'`).run();
-  db.prepare(`DELETE FROM checkpoint_blobs WHERE thread_id != 'global_state'`).run();
-  db.prepare(`DELETE FROM checkpoint_writes WHERE thread_id != 'global_state'`).run();
+  db.prepare(`DELETE FROM writes WHERE thread_id != 'global_state'`).run();
 }
 
 export async function purgeMemory() {
@@ -140,10 +153,10 @@ export function searchMemory(query, limit = 5) {
     `);
     const sanitizedQuery = query.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
     if (!sanitizedQuery) return [];
-    
+
     const ftsQuery = sanitizedQuery.split(/\s+/).map(w => w + '*').join(' OR ');
     return stmt.all(ftsQuery, limit);
-} catch (err) {
+  } catch (err) {
     return [];
   }
 }
@@ -156,19 +169,19 @@ export async function getRagContext(query, projectsDir) {
       prefetchData += "\n--- PRE-FETCHED MEMORY ---\n";
       prefetchData += memResults.map(r => r.content).join('\n\n');
     }
-    
+
     const words = query.split(/[\s,]+/).filter(w => w.length > 3 && !w.toLowerCase().match(/^(the|and|for|with|that|this|what|how|where|when|please|fix|update|create)$/));
     if (words.length > 0) {
       const searchKeyword = words[0];
       try {
-         const { queryCodegraph } = await import('../tools/codegraph.mjs');
-         const cgResult = await queryCodegraph(searchKeyword, projectsDir);
-         if (cgResult && cgResult.trim() && !cgResult.includes("No nodes found") && !cgResult.includes("Error")) {
-            prefetchData += `\n--- PRE-FETCHED CODEGRAPH (Keyword: ${searchKeyword}) ---\n`;
-            prefetchData += cgResult.length > 1500 ? cgResult.substring(0, 1500) + '...[TRUNCATED]' : cgResult; 
-         }
-      } catch(e) {}
+        const { queryCodegraph } = await import('../tools/codegraph.mjs');
+        const cgResult = await queryCodegraph(searchKeyword, projectsDir);
+        if (cgResult && cgResult.trim() && !cgResult.includes("No nodes found") && !cgResult.includes("Error")) {
+          prefetchData += `\n--- PRE-FETCHED CODEGRAPH (Keyword: ${searchKeyword}) ---\n`;
+          prefetchData += cgResult.length > 1500 ? cgResult.substring(0, 1500) + '...[TRUNCATED]' : cgResult;
+        }
+      } catch (e) { }
     }
-  } catch(e) {}
+  } catch (e) { }
   return prefetchData;
 }
