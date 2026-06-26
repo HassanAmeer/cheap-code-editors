@@ -1,6 +1,5 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
-import Database from "better-sqlite3";
 import fs from 'fs';
 import path from "path";
 import { fileURLToPath } from 'url';
@@ -14,7 +13,24 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const dbPath = path.join(dataDir, 'cli_data.db');
-export const db = new Database(dbPath);
+
+let dbInstance;
+
+if (typeof process !== "undefined" && process.versions && process.versions.bun) {
+  // Bun environment
+  const { Database: BunDatabase } = await import("bun:sqlite");
+  dbInstance = new BunDatabase(dbPath);
+  // Monkey-patch .pragma for better-sqlite3 compatibility
+  dbInstance.pragma = function (str) {
+    return this.query(`PRAGMA ${str}`).all();
+  };
+} else {
+  // Node.js environment
+  const BetterSqlite3 = (await import("better-sqlite3")).default;
+  dbInstance = new BetterSqlite3(dbPath);
+}
+
+export const db = dbInstance;
 
 // Initialize the checkpointer
 const checkpointer = new SqliteSaver(db);
