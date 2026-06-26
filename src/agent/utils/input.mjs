@@ -380,6 +380,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         if (buffer === '``') { buffer = ''; cursorPos = 0; }
         if (state) {
           state.teamModeIndex = ((state.teamModeIndex || 1) % 9) + 1;
+          import('../history.mjs').then(m => m.saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled)).catch(() => {});
           renderLine();
         }
         return;

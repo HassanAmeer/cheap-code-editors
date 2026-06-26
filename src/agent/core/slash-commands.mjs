@@ -284,50 +284,54 @@ export async function executeSlashCommand(cmdInput, ctx) {
         theme.dim('  └' + '─'.repeat(colW) + '┴' + '─'.repeat(modelColW) + '┘\n')
       );
 
-      // Pick a role to configure
-      let selectedRoleKey;
-      try {
-        const roleChoices = [
-          ...roles.map(r => ({
-            name: theme.dim(`${r.icon} ${r.label.padEnd(20)} → ${(savedRoles[r.key] || 'default').substring(0, 38)}`),
-            value: r.key
-          })),
-          { name: theme.dim('🗑  Reset ALL roles to default'), value: '__reset__' },
-          { name: theme.dim('✕  Cancel'), value: '__cancel__' }
-        ];
-        selectedRoleKey = await select({
-          message: 'Select role to configure:',
-          choices: roleChoices,
-          theme: getPromptTheme()
-        });
-      } catch (e) {
-        return { action: 'continue' };
-      }
+      while (true) {
+        const savedRoles = state.modelRoles || {};
 
-      if (!selectedRoleKey || selectedRoleKey === '__cancel__') {
-        return { action: 'continue' };
-      }
+        // Pick a role to configure
+        let selectedRoleKey;
+        try {
+          const roleChoices = [
+            ...roles.map(r => ({
+              name: theme.dim(`${r.icon} ${r.label.padEnd(20)} → ${(savedRoles[r.key] || 'default').substring(0, 38)}`),
+              value: r.key
+            })),
+            { name: theme.dim('🗑  Reset ALL roles to default'), value: '__reset__' },
+            { name: theme.dim('✕  Done / Cancel'), value: '__cancel__' }
+          ];
+          selectedRoleKey = await select({
+            message: 'Select role to configure:',
+            choices: roleChoices,
+            theme: getPromptTheme()
+          });
+        } catch (e) {
+          break; // User aborted
+        }
 
-      if (selectedRoleKey === '__reset__') {
-        state.modelRoles = {};
-        await saveModelRoles({});
-        console.log(theme.success(`\n✔ All role model assignments reset to default (${state.currentModel})\n`));
-        return { action: 'continue' };
-      }
+        if (!selectedRoleKey || selectedRoleKey === '__cancel__') {
+          break;
+        }
 
-      // Pick model for selected role
-      const groups = getModelsGroupedByProvider();
-      const roleInfo = roles.find(r => r.key === selectedRoleKey);
-      console.log(theme.info(`\n${roleInfo.icon} Selecting model for role: ${roleInfo.label}\n`));
-      const selectedModel = await gridPrompt(groups, savedRoles[selectedRoleKey] || state.currentModel);
+        if (selectedRoleKey === '__reset__') {
+          state.modelRoles = {};
+          await saveModelRoles({});
+          console.log(theme.success(`\n✔ All role model assignments reset to default (${state.currentModel})\n`));
+          continue;
+        }
 
-      if (selectedModel) {
-        const newRoles = { ...savedRoles, [selectedRoleKey]: selectedModel };
-        state.modelRoles = newRoles;
-        await saveModelRoles(newRoles);
-        console.log(theme.success(`\n✔ Role "${roleInfo.label}" assigned to model: ${selectedModel}\n`));
-      } else {
-        console.log(theme.dim('\nModel selection cancelled.\n'));
+        // Pick model for selected role
+        const groups = getModelsGroupedByProvider();
+        const roleInfo = roles.find(r => r.key === selectedRoleKey);
+        console.log(theme.info(`\n${roleInfo.icon} Selecting model for role: ${roleInfo.label}\n`));
+        const selectedModel = await gridPrompt(groups, savedRoles[selectedRoleKey] || state.currentModel);
+
+        if (selectedModel) {
+          const newRoles = { ...savedRoles, [selectedRoleKey]: selectedModel };
+          state.modelRoles = newRoles;
+          await saveModelRoles(newRoles);
+          console.log(theme.success(`\n✔ Role "${roleInfo.label}" assigned to model: ${selectedModel}\n`));
+        } else {
+          console.log(theme.dim('\nModel selection cancelled.\n'));
+        }
       }
       return { action: 'continue' };
     }
@@ -731,10 +735,9 @@ Instructions for you (The Architect):
   }
   if (lowerCmd === '/permission') {
     const modeChoices = [
-      { name: theme.success('default') + chalk.dim(' - Ask for every action'), value: 'default' },
-      { name: theme.warning('plan') + chalk.dim('    - Ask only for sensitive actions (e.g. deleting files)'), value: 'plan' },
-      { name: theme.warning('auto') + chalk.dim('    - No prompts during execution'), value: 'auto' },
-      { name: theme.error('yolo') + chalk.dim('    - Warning: all permission checks disabled'), value: 'yolo' }
+      { name: theme.success('ask') + chalk.dim('       - Har bar confirm karega (yes/no)'), value: 'ask' },
+      { name: theme.warning('sensitive') + chalk.dim(' - Jab AI ko lage ke sensitive cheez hai tabhi permission mangega'), value: 'sensitive' },
+      { name: theme.error('full') + chalk.dim('      - Koi permission nahi mangega, sab khud karega'), value: 'full' }
     ];
 
     try {
@@ -785,6 +788,8 @@ Instructions for you (The Architect):
   }
   if (lowerCmd === '/team') {
     state.isTeamModeEnabled = !state.isTeamModeEnabled;
+    const { saveTeamModeSettings } = await import('../history.mjs');
+    await saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled);
     if (state.isTeamModeEnabled) {
       console.log(theme.success(`✔ Multi-Agent Team Mode: ON 👥`));
       console.log(theme.dim(`All upcoming tasks will be processed by the Architect -> Developer -> QA pipeline.\n`));

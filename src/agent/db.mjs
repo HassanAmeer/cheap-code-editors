@@ -73,7 +73,9 @@ const StateAnnotation = {
   autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 },
   isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
   modelRoles: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) },
-  tokenUsageLimit: { reducer: (x, y) => y !== undefined ? y : x, default: () => 0 }
+  tokenUsageLimit: { reducer: (x, y) => y !== undefined ? y : x, default: () => 0 },
+  teamModeIndex: { reducer: (x, y) => y !== undefined ? y : x, default: () => 4 },
+  isTeamModeEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => false }
 };
 
 const builder = new StateGraph({ channels: StateAnnotation })

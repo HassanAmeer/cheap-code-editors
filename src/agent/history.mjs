@@ -188,3 +188,21 @@ export async function getTokenUsageLimitSetting() {
         return state.tokenUsageLimit !== undefined && state.tokenUsageLimit !== null ? state.tokenUsageLimit : 0;
     } catch (err) { return 0; }
 }
+
+export async function getTeamModeSettings() {
+    try {
+        const state = await getGlobalState();
+        return {
+            teamModeIndex: state.teamModeIndex !== undefined ? state.teamModeIndex : 4,
+            isTeamModeEnabled: state.isTeamModeEnabled !== undefined ? state.isTeamModeEnabled : false
+        };
+    } catch (e) {
+        return { teamModeIndex: 4, isTeamModeEnabled: false };
+    }
+}
+
+export async function saveTeamModeSettings(index, isEnabled) {
+    try {
+        await updateGlobalState({ teamModeIndex: index, isTeamModeEnabled: isEnabled });
+    } catch (e) {}
+}

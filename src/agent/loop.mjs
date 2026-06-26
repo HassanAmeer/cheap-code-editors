@@ -24,7 +24,7 @@ marked.setOptions({
 });
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting } from './history.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting, getTeamModeSettings } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -39,6 +39,7 @@ import { handleSkillsPrompt } from '../ui/skillsPrompt.mjs';
 import { handleThemePrompt } from '../ui/theme.mjs';
 
 export async function startChatLoop() {
+  const teamSettings = await getTeamModeSettings();
 
   const state = {
     autoPermissionMode: await getAutoPermissionSetting(),
@@ -60,8 +61,8 @@ export async function startChatLoop() {
     testRetries: 0,
     selectedFilePath: null,
     preInputBuffer: "",
-    teamModeIndex: 2, // Default to Builder mode
-    isTeamModeEnabled: false,
+    teamModeIndex: teamSettings.teamModeIndex, // Default to Builder mode
+    isTeamModeEnabled: teamSettings.isTeamModeEnabled,
     isAutoContinueEnabled: false,
     globalTaskQueue: [],
     isMenuOpen: false,
@@ -174,8 +175,8 @@ export async function startChatLoop() {
     const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
 
     // Permission mode segment
-    const permMode = state.autoPermissionMode || 'plan';
-    const permColor = permMode === 'yolo' ? theme.error : (permMode === 'default' ? theme.success : theme.warning);
+    const permMode = state.autoPermissionMode || 'sensitive';
+    const permColor = permMode === 'full' ? theme.error : (permMode === 'ask' ? theme.success : theme.warning);
     const permModeStyled = permColor ? permColor(permMode) : permMode;
     const permSeg = `${theme.dim('permissions:')} ${permModeStyled}`;
 
@@ -194,9 +195,6 @@ export async function startChatLoop() {
     const pctStr = theme.accent(`${pct}%`);
     const contextSeg = `${barFilled}${barEmpty} ${pctStr} ${theme.dim('ctx')}`;
 
-    // Phase segment: "phase:explore"
-    const phaseSeg = `${theme.dim('phase:')}${theme.accent('explore')}`;
-
     // Command hint right-aligned: "/ for commands"
     const hintText = theme.dim('/ for commands');
     const hintLen = '/ for commands'.length;
@@ -205,7 +203,7 @@ export async function startChatLoop() {
     const sep = ` ${theme.dim('·')} `;
 
     // Assemble segments
-    const segs = [modeSeg, permSeg, modelSeg, contextSeg, phaseSeg];
+    const segs = [modeSeg, permSeg, modelSeg, contextSeg];
     const segTexts = segs.join(sep);
 
     // Accurately measure the visible length by stripping ANSI escape codes
@@ -831,6 +829,7 @@ export async function startChatLoop() {
             stream_options: { include_usage: true }
           }, { signal: abortController.signal });
 
+          let streamFinishReason = null;
           for await (const chunk of response) {
             if (isInterrupted) break;
 
@@ -841,6 +840,10 @@ export async function startChatLoop() {
               currentInputTokens = usageObj.prompt_tokens || 0;
               currentOutputTokens = usageObj.completion_tokens || 0;
               totalTokens = usageObj.total_tokens || 0;
+            }
+
+            if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
+              streamFinishReason = chunk.choices[0].finish_reason;
             }
 
             const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
@@ -976,7 +979,7 @@ export async function startChatLoop() {
               }
             }
           } else {
-            if (response.choices[0].finish_reason === 'length') {
+            if (streamFinishReason === 'length') {
               // Token limit reached — check if max retries applies
               if (state.isAutoContinueEnabled) {
                 safeLogMsg(theme.info("\n🔄 Token limit reached. Auto Continue on Stuck is ON. Resuming..."));

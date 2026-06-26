@@ -63,15 +63,15 @@ export async function executeTool(toolName, args, ctx) {
   } = ctx;
 
   let requiresPermission = false;
-  if (state.autoPermissionMode === 'default') {
+  if (state.autoPermissionMode === 'ask') {
     if (["run_terminal_command", "create_file", "edit_file", "replace_lines_in_file", "delete_file", "undo_action"].includes(toolName)) {
       requiresPermission = true;
     }
-  } else if (state.autoPermissionMode === 'plan') {
+  } else if (state.autoPermissionMode === 'sensitive') {
     if (isActionSensitive(toolName, args)) {
       requiresPermission = true;
     }
-  } else if (state.autoPermissionMode === 'auto' || state.autoPermissionMode === 'yolo') {
+  } else if (state.autoPermissionMode === 'full') {
     requiresPermission = false;
   }
 
