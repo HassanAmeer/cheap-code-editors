@@ -131,6 +131,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '⏣ test_proj     - Start an auto-fix testing loop on project', value: '/test_proj' },
         { name: '⍻ test_ai       - Test Current AI Model', value: '/test_ai' },
         { name: '⎘ attach        - Attach an image or file', value: '/attach' },
+        { name: '⎘ attach_remove - Remove attached image or file', value: '/attach_remove' },
         { name: '◷ history       - Last chats memory', value: '/history' },
         { name: '⇪ export        - Export Chat History (JSON & HTML)', value: '/export' },
         { name: '⇘ import        - Import Chat History (JSON)', value: '/import' },
@@ -233,6 +234,16 @@ export async function executeSlashCommand(cmdInput, ctx) {
         }
       } catch (err) {
         console.log(theme.dim("Attachment cancelled."));
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/attach_remove' || lowerCmd === '/remove_attach') {
+      if (state.selectedFilePath) {
+        state.selectedFilePath = null;
+        console.log(theme.success(`\n✔ Attachment removed successfully.\n`));
+      } else {
+        console.log(theme.dim(`\nNo attachment found to remove.\n`));
       }
       return { action: 'continue' };
     }
