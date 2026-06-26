@@ -625,9 +625,38 @@ Instructions for you (The Architect):
       if (!threads.includes(targetId)) {
         console.log(theme.error(`❌ Session ID not found: ${targetId}`));
       } else {
-        const { getChatState } = await import('../db.mjs');
+        const { getChatState, updateChatState } = await import('../db.mjs');
         const pastState = await getChatState(targetId);
-        return { action: 'resume', chatId: targetId, messages: pastState?.messages || [] };
+        let messages = pastState?.messages || [];
+        
+        // --- HISTORY SUMMARIZATION / CONTEXT PRUNING ---
+        if (messages.length > 20) {
+           console.log(theme.dim(`\nThis session has a large history (${messages.length} messages). Summarizing oldest messages to save context...`));
+           try {
+             const aiClient = getClientForModel(state.currentModel);
+             const messagesToSummarize = messages.slice(1, messages.length - 10);
+             const summaryPrompt = "Please provide a concise summary of the following conversation history so far. Focus on key decisions, code written, and current status:\n\n" + 
+                 messagesToSummarize.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`).join('\n\n');
+             
+             const summaryResponse = await aiClient.invoke([{ role: 'user', content: summaryPrompt }]);
+             const summaryContent = `[SYSTEM SUMMARY OF PREVIOUS CONVERSATION]\n${summaryResponse.content || summaryResponse}\n[/SYSTEM SUMMARY]`;
+             
+             // Keep the system prompt (index 0), the new summary, and the last 10 messages
+             const newMessages = [
+                 messages[0],
+                 { role: 'system', content: summaryContent },
+                 ...messages.slice(messages.length - 10)
+             ];
+             
+             await updateChatState(targetId, { messages: newMessages });
+             messages = newMessages;
+             console.log(theme.success(`✔ Summarized history successfully!`));
+           } catch (err) {
+             console.log(theme.error(`⚠️ Failed to summarize history: ${err.message}`));
+           }
+        }
+        
+        return { action: 'resume', chatId: targetId, messages: messages };
       }
     }
     return { action: 'continue' };

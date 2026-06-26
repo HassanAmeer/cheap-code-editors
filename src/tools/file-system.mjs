@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import chalk from 'chalk';
 import { exec } from 'child_process';
+import { addMemoryRecord } from '../agent/db.mjs';
 import { theme } from '../ui/theme.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ export async function createFile(relativePath, content) {
     
     // Auto-sync CodeGraph
     exec('npx codegraph sync', { cwd: PROJECTS_DIR }, () => {});
+    addMemoryRecord(`Created file: ${relativePath}`);
     
     return `Successfully created file: ${relativePath}`;
   } catch (error) {

@@ -7,6 +7,7 @@ import ora from 'ora';
 import chalk from 'chalk';
 import { confirm } from '@inquirer/prompts';
 import { checkAndInstallMissingDependencies } from './loop.mjs';
+import { queryCodegraph } from '../tools/codegraph.mjs';
 
 // Auto Healer Watcher Process
 export async function startAutoHealer(scriptName, projectsDir, currentModel = "bigpickle") {
@@ -108,7 +109,27 @@ export async function startAutoHealer(scriptName, projectsDir, currentModel = "b
           console.log(theme.info("\n🔍 Passing error trace to AI for CodeGraph analysis..."));
           const errorTrace = rollingBuffer.join('\n');
           
-          let instruction = `The server crashed or threw an error. Here is the recent server output and error trace:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n\nPlease use the codegraph tools to analyze this error in the codebase, find the relevant files/functions, and then use edit_file or replace_lines_in_file to fix it.`;
+          let codegraphContext = "";
+          // Attempt to extract file names (e.g. src/App.jsx)
+          const fileMatches = errorTrace.match(/[a-zA-Z0-9_\-\.\/]+\.(js|jsx|ts|tsx|mjs)/g);
+          if (fileMatches) {
+            const uniqueFiles = [...new Set(fileMatches)];
+            console.log(theme.dim(`Auto-Healer extracted files: ${uniqueFiles.join(', ')}`));
+            for (const f of uniqueFiles.slice(0, 3)) { // Limit to 3 to avoid spam
+              try {
+                const cgResult = await queryCodegraph(f, projectsDir);
+                codegraphContext += `\nCodeGraph Data for ${f}:\n${cgResult}\n`;
+              } catch (e) {
+                // ignore codegraph failure
+              }
+            }
+          }
+          
+          let instruction = `The server crashed or threw an error. Here is the recent server output and error trace:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n`;
+          if (codegraphContext) {
+            instruction += `\nHere is some pre-fetched CodeGraph context for the files mentioned in the error:\n\`\`\`\n${codegraphContext}\n\`\`\`\n`;
+          }
+          instruction += `\nPlease use the codegraph tools to analyze this error in the codebase, find the relevant files/functions, and then use edit_file or replace_lines_in_file to fix it.`;
           
           // Stop the server process so the AI can take over
           cleanup();

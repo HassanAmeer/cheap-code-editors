@@ -25,7 +25,7 @@ async function withLock(filePath, fn) {
   }
 }
 
-import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
+import { getGlobalState, updateGlobalState, addMemoryRecord } from '../agent/db.mjs';
 
 // ============================================================
 //  UNDO STACK HELPERS
@@ -157,6 +157,7 @@ export async function editFile(relativePath, newContent, saveSnapshot = true) {
       printColorfulDiff(relativePath, oldContent, newContent);
       await fs.writeFile(filePath, newContent, 'utf8');
       triggerCodegraphSync();
+      addMemoryRecord(`Edited file: ${relativePath}`);
       return `Successfully edited file: ${relativePath}`;
     } catch (error) {
       return `Error editing file: ${error.message}`;
@@ -188,9 +189,13 @@ export async function undoAction(relativePath) {
           } catch (e) {
             throw new Error(`Could not delete newly created file. It might be locked by another process: ${e.message}`);
           }
+          triggerCodegraphSync();
+          addMemoryRecord(`Undo: deleted newly created file: ${relativePath}`);
           return `✔ Undo: deleted newly created file "${relativePath}".`;
         } else {
           await fs.writeFile(filePath, snap.content, 'utf8');
+          triggerCodegraphSync();
+          addMemoryRecord(`Undo: restored file to previous version: ${relativePath}`);
           return `✔ Undo: restored "${relativePath}" to previous version.`;
         }
       } catch (writeErr) {
@@ -229,6 +234,7 @@ export async function replaceLines(relativePath, startLine, endLine, newContent,
       const modifiedContent = lines.join('\n');
       await fs.writeFile(filePath, modifiedContent, 'utf8');
       triggerCodegraphSync();
+      addMemoryRecord(`Replaced lines ${startLine}-${endLine} in file: ${relativePath}`);
 
       printColorfulDiff(relativePath, oldContent, modifiedContent);
       return `Successfully replaced lines ${startLine}-${endLine} in ${relativePath}.`;

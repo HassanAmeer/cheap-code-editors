@@ -493,6 +493,45 @@ export async function startChatLoop() {
     } else {
       userMsgObj.content = query;
     }
+
+    // --- AUTOMATED RAG PRE-FETCHING ---
+    if (typeof query === 'string' && query.trim() !== '') {
+      try {
+        const { searchMemory } = await import('./db.mjs');
+        const { queryCodegraph } = await import('../tools/codegraph.mjs');
+        const { PROJECTS_DIR } = await import('../tools/file-system.mjs');
+        
+        let prefetchData = "";
+        
+        // 1. Search FTS5 Memory
+        const memResults = searchMemory(query, 3);
+        if (memResults && memResults.length > 0) {
+          prefetchData += "\n--- PRE-FETCHED MEMORY ---\n";
+          prefetchData += memResults.map(r => r.content).join('\n\n');
+        }
+        
+        // 2. Extract potential file names or symbols
+        const words = query.split(/[\s,]+/).filter(w => w.length > 3 && !w.toLowerCase().match(/^(the|and|for|with|that|this|what|how|where|when|please|fix|update|create)$/));
+        if (words.length > 0) {
+          const searchKeyword = words[0];
+          try {
+             const cgResult = await queryCodegraph(searchKeyword, PROJECTS_DIR);
+             if (cgResult && cgResult.trim() && !cgResult.includes("No nodes found") && !cgResult.includes("Error")) {
+                prefetchData += `\n--- PRE-FETCHED CODEGRAPH (Keyword: ${searchKeyword}) ---\n`;
+                prefetchData += cgResult.length > 1500 ? cgResult.substring(0, 1500) + '...[TRUNCATED]' : cgResult; 
+             }
+          } catch(e) {}
+        }
+        
+        if (prefetchData) {
+          userMsgObj.content += `\n\n[SYSTEM AUTO-PREFETCH]\nBased on your query, here is some automatically retrieved context that might help:\n${prefetchData}\n[/SYSTEM AUTO-PREFETCH]`;
+          console.log(theme.dim(`✔ Pre-fetched Memory & CodeGraph context injected.`));
+        }
+      } catch (e) {
+        // ignore prefetch errors
+      }
+    }
+    // --- END PRE-FETCHING ---
     state.messages.push(userMsgObj);
 
     // Print the user message to the terminal now that the input block is cleared!
