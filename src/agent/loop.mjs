@@ -609,40 +609,97 @@ export async function startChatLoop() {
         let prevMessagesLength = state.messages.length;
         try {
           const aiClient = getClientForModel(state.currentModel);
-          
+
           let isStreaming = true;
-          let printQueue = "";
+          const responseMessage = { role: "assistant", content: "", tool_calls: [] };
+          let currentInputTokens = 0;
+          let currentOutputTokens = 0;
+          let totalTokens = 0;
+          let usageObj = null;
+
           let streamAnimIdx = 0;
           let stickyLinesCount = 0;
-          const isDebug = process.env.IS_DEBUG === 'true';
+          let previousLines = [];
 
           const bFrames = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '▊', '▋', '▌', '▍', '▎'];
           const sFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
           const eraseSticky = () => {
-             if (stickyLinesCount === 0) return;
-             readline.moveCursor(process.stdout, 0, -stickyLinesCount);
-             readline.clearScreenDown(process.stdout);
-             stickyLinesCount = 0;
-          };
+            if (stickyLinesCount === 0) return;
+            const moveUp = Math.max(0, stickyLinesCount - 1);
+            if (moveUp > 0) {
+              readline.moveCursor(process.stdout, 0, -moveUp);
+            }
+            readline.cursorTo(process.stdout, 0);
+            readline.clearScreenDown(process.stdout);
 
-          const drawSticky = (text) => {
-             stickyLinesCount = text.split('\n').length - 1;
-             process.stdout.write(text);
+            readline.moveCursor(process.stdout, 0, -1);
+
+            const lastLine = previousLines.length > 0 ? previousLines[previousLines.length - 1] : "";
+            const lastLineWidth = stripAnsiLocal(lastLine).length % (process.stdout.columns || 80);
+            if (lastLineWidth > 0) {
+              readline.cursorTo(process.stdout, lastLineWidth);
+            } else {
+              readline.cursorTo(process.stdout, 0);
+            }
+
+            stickyLinesCount = 0;
           };
 
           const renderFrame = () => {
-              eraseSticky();
-              if (printQueue.length > 0) {
-                  process.stdout.write(printQueue);
-                  printQueue = "";
+            eraseSticky();
+
+            if (responseMessage.content) {
+              let rendered = marked(responseMessage.content);
+              rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
+              rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
+              rendered = rendered.replace(/<thought>/g, '\x1b[90m');
+              rendered = rendered.replace(/<\/thought>/g, '\x1b[0m');
+
+              let openT = rendered.lastIndexOf('\x1b[90m');
+              let closeT = rendered.lastIndexOf('\x1b[0m');
+              if (openT > closeT) {
+                rendered += '\x1b[0m';
               }
-              streamAnimIdx++;
-              const baseText = state.currentSpinnerText || theme.dim('Thinking...');
-              const bChar = theme.accent ? theme.accent(bFrames[streamAnimIdx % bFrames.length]) : chalk.gray(bFrames[streamAnimIdx % bFrames.length]);
-              const sChar = theme.info ? theme.info(sFrames[streamAnimIdx % sFrames.length]) : chalk.cyan(sFrames[streamAnimIdx % sFrames.length]);
-              
-              drawSticky(`\n\n${bChar} ${sChar} ${baseText}` + getStickyBottomText(streamAnimIdx));
+
+              const fullRendered = rendered.trimEnd();
+              const borderStr = theme.border ? theme.border('▌ ') : chalk.gray('▌ ');
+              const newLines = fullRendered.split('\n').map(line => borderStr + line);
+
+              let diffIndex = 0;
+              while (diffIndex < previousLines.length && diffIndex < newLines.length && previousLines[diffIndex] === newLines[diffIndex]) {
+                diffIndex++;
+              }
+
+              if (diffIndex < newLines.length || diffIndex < previousLines.length) {
+                if (diffIndex === previousLines.length) {
+                  const textToPrint = '\n' + newLines.slice(diffIndex).join('\n');
+                  process.stdout.write(textToPrint);
+                } else {
+                  const changedText = previousLines.slice(diffIndex).join('\n');
+                  let linesToMoveUp = countPhysicalLineFeeds(changedText);
+
+                  if (linesToMoveUp > 0) {
+                    readline.moveCursor(process.stdout, 0, -linesToMoveUp);
+                  }
+                  readline.cursorTo(process.stdout, 0);
+                  readline.clearScreenDown(process.stdout);
+
+                  const textToPrint = newLines.slice(diffIndex).join('\n');
+                  process.stdout.write(textToPrint);
+                }
+                previousLines = newLines;
+              }
+            }
+
+            streamAnimIdx++;
+            const baseText = state.currentSpinnerText || theme.dim('Thinking...');
+            const bChar = theme.accent ? theme.accent(bFrames[streamAnimIdx % bFrames.length]) : chalk.gray(bFrames[streamAnimIdx % bFrames.length]);
+            const sChar = theme.info ? theme.info(sFrames[streamAnimIdx % sFrames.length]) : chalk.cyan(sFrames[streamAnimIdx % sFrames.length]);
+
+            const stickyText = `\n\n${bChar} ${sChar} ${baseText}` + getStickyBottomText(streamAnimIdx);
+            stickyLinesCount = countPhysicalLineFeeds(stickyText);
+            process.stdout.write(stickyText);
           };
 
           spinner.stop();
@@ -651,7 +708,7 @@ export async function startChatLoop() {
 
           // Independent Render Loop for ultra-smooth UI during TTFT and Stream (25 FPS)
           const renderInterval = setInterval(() => {
-              if (isStreaming) renderFrame();
+            if (isStreaming) renderFrame();
           }, 40);
 
           const response = await aiClient.chat.completions.create({
@@ -664,58 +721,9 @@ export async function startChatLoop() {
             stream_options: { include_usage: true }
           }, { signal: abortController.signal });
 
-          const responseMessage = { role: "assistant", content: "", tool_calls: [] };
-          let currentInputTokens = 0;
-          let currentOutputTokens = 0;
-          let totalTokens = 0;
-          let usageObj = null;
-
-          let isNewLine = true;
-          let inThinking = false;
-          let inCodeBlock = false;
-          let codeBlockTicks = 0;
-          let buffer = "";
-
-          const flushBuffer = (text) => {
-              let out = "";
-              for (let i = 0; i < text.length; i++) {
-                  const char = text[i];
-                  
-                  if (char === '`') {
-                      codeBlockTicks++;
-                      if (codeBlockTicks === 3) {
-                          inCodeBlock = !inCodeBlock;
-                          codeBlockTicks = 0;
-                      }
-                  } else {
-                      codeBlockTicks = 0;
-                  }
-                  
-                  if (!inThinking || isDebug) {
-                      if (isNewLine) {
-                          out += inThinking ? chalk.gray('▌ ') : (theme.border ? theme.border('▌ ') : chalk.gray('▌ '));
-                          isNewLine = false;
-                      }
-                      
-                      if (inThinking) {
-                          out += chalk.gray(char);
-                      } else if (inCodeBlock || char === '`') {
-                          out += theme.highlight ? theme.highlight(char) : chalk.cyan(char);
-                      } else {
-                          out += chalk.whiteBright(char);
-                      }
-                      
-                      if (char === '\n') {
-                          isNewLine = true;
-                      }
-                  }
-              }
-              printQueue += out; 
-          };
-
           for await (const chunk of response) {
             if (isInterrupted) break;
-            
+
             if (chunk.usage) {
               usageObj = chunk.usage;
               state.modelTokenUsage[state.currentModel] = (state.modelTokenUsage[state.currentModel] || 0) + usageObj.total_tokens;
@@ -730,60 +738,6 @@ export async function startChatLoop() {
 
             if (delta.content) {
               responseMessage.content += delta.content;
-              buffer += delta.content;
-
-              while (true) {
-                  if (!inThinking) {
-                      const idx = buffer.indexOf('<thinking>');
-                      if (idx !== -1) {
-                          flushBuffer(buffer.substring(0, idx));
-                          inThinking = true;
-                          buffer = buffer.substring(idx + '<thinking>'.length);
-                          if (isDebug) printQueue += theme.dim("\n🤔 Thinking...\n");
-                          isNewLine = true;
-                      } else {
-                          const idxAlt = buffer.indexOf('<thought>');
-                          if (idxAlt !== -1) {
-                              flushBuffer(buffer.substring(0, idxAlt));
-                              inThinking = true;
-                              buffer = buffer.substring(idxAlt + '<thought>'.length);
-                              if (isDebug) printQueue += theme.dim("\n🤔 Thinking...\n");
-                              isNewLine = true;
-                          } else {
-                              break;
-                          }
-                      }
-                  } else {
-                      const idx = buffer.indexOf('</thinking>');
-                      if (idx !== -1) {
-                          flushBuffer(buffer.substring(0, idx));
-                          inThinking = false;
-                          buffer = buffer.substring(idx + '</thinking>'.length);
-                          if (isDebug) printQueue += theme.dim("\n\n");
-                          isNewLine = true;
-                      } else {
-                          const idxAlt = buffer.indexOf('</thought>');
-                          if (idxAlt !== -1) {
-                              flushBuffer(buffer.substring(0, idxAlt));
-                              inThinking = false;
-                              buffer = buffer.substring(idxAlt + '</thought>'.length);
-                              if (isDebug) printQueue += theme.dim("\n\n");
-                              isNewLine = true;
-                          } else {
-                              break;
-                          }
-                      }
-                  }
-              }
-
-              const lastLess = buffer.lastIndexOf('<');
-              if (lastLess !== -1 && buffer.length - lastLess < 15) {
-                  flushBuffer(buffer.substring(0, lastLess));
-                  buffer = buffer.substring(lastLess);
-              } else {
-                  flushBuffer(buffer);
-                  buffer = "";
-              }
             }
 
             if (delta.tool_calls) {
@@ -791,9 +745,9 @@ export async function startChatLoop() {
                 const idx = tc.index;
                 if (!responseMessage.tool_calls[idx]) {
                   responseMessage.tool_calls[idx] = {
-                     id: tc.id || "",
-                     type: tc.type || "function",
-                     function: { name: tc.function?.name || "", arguments: "" }
+                    id: tc.id || "",
+                    type: tc.type || "function",
+                    function: { name: tc.function?.name || "", arguments: "" }
                   };
                 } else {
                   if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
@@ -806,19 +760,10 @@ export async function startChatLoop() {
 
           isStreaming = false;
           clearInterval(renderInterval);
+          renderFrame(); // Ensure the final content is rendered before erasing sticky!
           eraseSticky();
-          
-          if (buffer) {
-              flushBuffer(buffer);
-          }
-          if (printQueue.length > 0) {
-              process.stdout.write(printQueue);
-          }
-          if (!isNewLine) {
-              process.stdout.write('\n\n');
-          } else {
-              process.stdout.write('\n');
-          }
+
+          process.stdout.write('\n\n');
 
           if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
             for (const toolCall of responseMessage.tool_calls) {
