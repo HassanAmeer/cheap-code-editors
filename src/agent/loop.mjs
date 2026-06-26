@@ -978,7 +978,10 @@ export async function startChatLoop() {
           } else {
             if (response.choices[0].finish_reason === 'length') {
               // Token limit reached — check if max retries applies
-              if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
+              if (state.isAutoContinueEnabled) {
+                safeLogMsg(theme.info("\n🔄 Token limit reached. Auto Continue on Stuck is ON. Resuming..."));
+                state.messages.push({ role: "user", content: "Continue generating from where you left off." });
+              } else if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
                 autoContinueCurrentRetries++;
                 safeLogMsg(theme.info(`\n🔄 Token limit reached. Auto-Continue (${autoContinueCurrentRetries}/${state.autoContinueMaxRetries}). Resuming...`));
                 state.messages.push({ role: "user", content: "Continue generating from where you left off." });
@@ -988,9 +991,6 @@ export async function startChatLoop() {
                 safeLogMsg(theme.warning(`\n⛔ Auto-Continue limit reached (${state.autoContinueMaxRetries}/${state.autoContinueMaxRetries}). Stopped. Please enter a new task.\n`));
                 turnIsActive = false;
                 import('../ui/sound.mjs').then(m => m.playNotification());
-              } else if (state.isAutoContinueEnabled) {
-                safeLogMsg(theme.info("\n🔄 Token limit reached. Infinite Auto-Continue is ON. Resuming..."));
-                state.messages.push({ role: "user", content: "Continue generating from where you left off." });
               } else {
                 turnIsActive = false;
                 import('../ui/sound.mjs').then(m => m.playNotification());
@@ -1018,7 +1018,10 @@ export async function startChatLoop() {
             turnIsActive = false;
           } else {
             safeLogMsg(theme.error(`\n❌ AI Error: ${apiErr.message}\n`));
-            if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
+            if (state.isAutoContinueEnabled) {
+              safeLogMsg(theme.info("🔄 Auto Continue on Stuck is ON. Feeding error back to AI..."));
+              state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
+            } else if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
               autoContinueCurrentRetries++;
               safeLogMsg(theme.info(`🔄 Auto-Retry on Error (${autoContinueCurrentRetries}/${state.autoContinueMaxRetries}). Feeding error back to AI...`));
               state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
@@ -1028,9 +1031,6 @@ export async function startChatLoop() {
               safeLogMsg(theme.warning(`\n⛔ Auto-Retry limit reached (${state.autoContinueMaxRetries}/${state.autoContinueMaxRetries}). Stopped. Please enter a new task.\n`));
               state.messages = state.messages.slice(0, prevMessagesLength);
               turnIsActive = false;
-            } else if (state.isAutoContinueEnabled) {
-              safeLogMsg(theme.info("🔄 Infinite Auto-Continue Mode is ON. Feeding error back to AI..."));
-              state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
             } else {
               state.messages = state.messages.slice(0, prevMessagesLength);
               turnIsActive = false;

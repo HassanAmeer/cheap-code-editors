@@ -4,6 +4,7 @@
  * // Do not remove
  */
 import path from 'path';
+import readline from 'readline';
 import os from 'os';
 import fs from 'fs/promises';
 import chalk from 'chalk';
@@ -121,8 +122,8 @@ export async function executeSlashCommand(cmdInput, ctx) {
         : '⑆ team          - Multi-Agent Team Mode: OFF';
 
       const autoContChoiceName = state.isAutoContinueEnabled
-        ? '⍾ auto_continue - Infinite Auto Continue Mode: ON'
-        : '⍾ auto_continue - Infinite Auto Continue Mode: OFF';
+        ? '⍾ auto_continue - Auto Continue on Stuck: ON'
+        : '⍾ auto_continue - Auto Continue on Stuck: OFF';
 
       const autoModelChoiceName = state.isAutoModeEnabled
         ? '⇄ auto models   - Auto Model Switching: ON'
@@ -796,23 +797,59 @@ Instructions for you (The Architect):
   if (lowerCmd === '/auto_continue') {
     state.isAutoContinueEnabled = !state.isAutoContinueEnabled;
     if (state.isAutoContinueEnabled) {
-      console.log(theme.success(`✔ Infinite Auto Continue Mode: ON ♾️`));
+      console.log(theme.success(`✔ Auto Continue on Stuck: ON ♾️`));
       console.log(theme.dim(`AI will automatically continue if it hits limits.\n`));
     } else {
-      console.log(theme.success(`✔ Infinite Auto Continue Mode: OFF`));
+      console.log(theme.success(`✔ Auto Continue on Stuck: OFF`));
     }
     return { action: 'continue' };
   }
   if (lowerCmd === '/auto_continue_max_time') {
     let currentVal = state.autoContinueMaxRetries !== undefined ? state.autoContinueMaxRetries : 3;
-    currentVal++;
-    if (currentVal > 10) currentVal = 0;
-    state.autoContinueMaxRetries = currentVal;
-
     const { saveAutoContinueMaxTimeSetting } = await import('../history.mjs');
-    await saveAutoContinueMaxTimeSetting(currentVal);
 
-    return { action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) };
+    return new Promise((resolve) => {
+      let isDone = false;
+
+      const render = () => {
+        readline.clearLine(process.stdout, 0);
+        readline.cursorTo(process.stdout, 0);
+        process.stdout.write(
+          theme.info(`⟲ Auto Continue Max Retries: `) +
+          theme.accent(currentVal) +
+          theme.dim(` (Press SPACE to increase, ENTER to confirm, ESC to cancel)`)
+        );
+      };
+
+      const keyHandler = async (ch, key) => {
+        if (isDone) return;
+        if (key && key.name === 'space') {
+          currentVal++;
+          if (currentVal > 15) currentVal = 0;
+          render();
+        } else if (key && key.name === 'return') {
+          isDone = true;
+          process.stdin.removeListener('keypress', keyHandler);
+          process.stdout.write('\n');
+          state.autoContinueMaxRetries = currentVal;
+          await saveAutoContinueMaxTimeSetting(currentVal);
+          resolve({ action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) });
+        } else if (key && (key.name === 'escape' || (key.ctrl && key.name === 'c'))) {
+          isDone = true;
+          process.stdin.removeListener('keypress', keyHandler);
+          process.stdout.write('\n');
+          resolve({ action: 'redraw', message: theme.dim(`\nMenu cancelled.\n`) });
+        }
+      };
+
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      process.stdin.resume();
+      process.stdin.on('keypress', keyHandler);
+      console.log(); // Print empty line before prompt
+      render();
+    });
   }
   if (lowerCmd === '/usage_limit') {
     let currentLimit = state.tokenUsageLimit || 0;
