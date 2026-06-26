@@ -379,7 +379,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
       if ((key && ((key.name === 'tab' && key.shift) || key.name === 'backtab')) || char === '\x1b[Z' || (char === '``' || buffer === '``')) {
         if (buffer === '``') { buffer = ''; cursorPos = 0; }
         if (state) {
-          state.teamModeIndex = ((state.teamModeIndex || 1) % 7) + 1;
+          state.teamModeIndex = ((state.teamModeIndex || 1) % 9) + 1;
           renderLine();
         }
         return;

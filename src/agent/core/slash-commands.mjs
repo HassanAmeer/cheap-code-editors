@@ -218,12 +218,13 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
+        { key: 'researcher',          label: 'Researcher',         icon: '🔍' },
+        { key: 'system_agent',        label: 'System Agent',       icon: '⚙️ ' },
         { key: 'plan',                label: 'Plan',               icon: '📋' },
         { key: 'builder',             label: 'Builder',            icon: '🔨' },
         { key: 'fixer',               label: 'Fixer',              icon: '🔧' },
         { key: 'reviewer',            label: 'Reviewer',           icon: '🔍' },
         { key: 'web_search',          label: 'Web Search Agent',   icon: '🌐' },
-        { key: 'system_agent',        label: 'System Agent',       icon: '⚙️ ' },
       ];
 
       // Current saved roles

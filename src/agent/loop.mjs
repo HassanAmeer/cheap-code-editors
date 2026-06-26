@@ -151,13 +151,15 @@ export async function startChatLoop() {
     const columns = process.stdout.columns || 80;
     const maxLen = columns - 1;
 
-    // Mode segment: 7 circles representing the team mode
+    // Mode segment: 9 circles representing the team mode
     const modeIdx = state.teamModeIndex || 1;
     let circles = '';
-    for (let i = 1; i <= 7; i++) {
+    for (let i = 1; i <= 9; i++) {
       circles += (i === modeIdx) ? '●' : '○';
     }
     const modeNames = [
+      'researcher',
+      'system_agent',
       'plan',
       'builder',
       'fixer',
@@ -166,7 +168,7 @@ export async function startChatLoop() {
       'plan+build+fix',
       'plan+build+fix+review'
     ];
-    const currentModeName = modeNames[modeIdx - 1] || 'plan';
+    const currentModeName = modeNames[modeIdx - 1] || 'researcher';
     const modeColor = theme.accent ? theme.accent : chalk.cyan;
     const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
 
@@ -686,7 +688,8 @@ export async function startChatLoop() {
         let prevMessagesLength = state.messages.length;
         try {
           // Determine effective model: use role-specific model if set
-          const currentTeamModeName = (['plan','builder','fixer','reviewer','plan+build','plan+build+fix','plan+build+fix+review'][state.teamModeIndex - 1] || 'plan');
+          const TEAM_MODE_NAMES = ['researcher','system_agent','plan','builder','fixer','reviewer','plan+build','plan+build+fix','plan+build+fix+review'];
+          const currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'plan';
           const roleModel = state.modelRoles && state.modelRoles[currentTeamModeName];
           const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
           const systemModel = state.modelRoles && state.modelRoles['system_agent'];
