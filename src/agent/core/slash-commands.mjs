@@ -613,7 +613,7 @@ Instructions for you (The Architect):
       { name: theme.warning('auto') + chalk.dim('    - No prompts during execution'), value: 'auto' },
       { name: theme.error('yolo') + chalk.dim('    - Warning: all permission checks disabled'), value: 'yolo' }
     ];
-    
+
     try {
       const newMode = await select({
         message: 'Select Auto Permission Mode:',
@@ -625,7 +625,7 @@ Instructions for you (The Architect):
       state.autoPermissionMode = newMode;
       await saveAutoPermissionSetting(newMode);
       state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
-      
+
       return { action: 'redraw', message: theme.success(`✔ Auto Permission Mode set to: ${newMode.toUpperCase()}\n`) };
     } catch (e) {
       return { action: 'redraw', message: theme.dim("Cancelled.\n") };
@@ -768,7 +768,7 @@ Instructions for you (The Architect):
   }
 
   if (lowerCmd === '/exit' || lowerCmd === '/quit') {
-    console.log(theme.success("\n\nGoodbye! 👋\n"));
+    console.log(theme.success("\n\n\n\n\nGoodbye! 👋\n"));
     return { action: 'break' };
   }
   if (lowerCmd === '/undo') {
@@ -878,7 +878,7 @@ Instructions for you (The Architect):
             state.messages = loadedMsgs;
             state.messages[0].content = await buildSystemPrompt(state.agentPersistentMemory, state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
             state.chatId = selectedChat;
-            
+
             return { action: 'redraw', message: theme.success(`\n✔ Loaded chat: ${selectedChat}\n`) };
           } else {
             return { action: 'redraw', message: theme.error("\n❌ Failed to load chat.\n") };

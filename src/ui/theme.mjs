@@ -154,8 +154,8 @@ export const theme = {
   mdCode: chalk.hex('#4A967D'),
   mdLink: chalk.hex('#7F77DD'),
   bashMode: chalk.hex('#BBE33B'),
-  customMessageBg: chalk.bgHex('#333333'),
-  customMessageBgHex: '#333333',
+  customMessageBg: chalk.bgHex('#0A0A0A'),
+  customMessageBgHex: '#0A0A0A',
 };
 
 export function setCLITheme(themeName) {

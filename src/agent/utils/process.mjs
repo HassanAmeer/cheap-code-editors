@@ -69,7 +69,7 @@ export function withTimeout(promise, timeoutMs, errorMsg) {
 }
 
 export async function handleExit() {
-  console.log(theme.success("\n\nGoodbye! 👋\n"));
+  console.log(theme.success("\n\n\n\n\nGoodbye! 👋\n"));
   // Force exit after 1.5 seconds if graceful shutdown hangs (Playwright known deadlock)
   setTimeout(() => process.exit(0), 1500).unref();
   try {

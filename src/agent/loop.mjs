@@ -240,7 +240,7 @@ export async function startChatLoop() {
     });
 
     const borderChar = "⏥";
-    const borderLine = theme.border ? theme.border(borderChar.repeat(cols)) : chalk.hex('#262626')(borderChar.repeat(cols));
+    const borderLine = theme.border ? theme.border(borderChar.repeat(cols - 1)) : chalk.hex('#262626')(borderChar.repeat(cols - 1));
 
     const displayStr = rowsToRender.join('\n') + '\n' + borderLine;
     const statusLine = getStatusBar();
@@ -609,33 +609,215 @@ export async function startChatLoop() {
         let prevMessagesLength = state.messages.length;
         try {
           const aiClient = getClientForModel(state.currentModel);
+          
+          let isStreaming = true;
+          let printQueue = "";
+          let streamAnimIdx = 0;
+          let stickyLinesCount = 0;
+          const isDebug = process.env.IS_DEBUG === 'true';
+
+          const bFrames = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '▊', '▋', '▌', '▍', '▎'];
+          const sFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+          const eraseSticky = () => {
+             if (stickyLinesCount === 0) return;
+             readline.moveCursor(process.stdout, 0, -stickyLinesCount);
+             readline.clearScreenDown(process.stdout);
+             stickyLinesCount = 0;
+          };
+
+          const drawSticky = (text) => {
+             stickyLinesCount = text.split('\n').length - 1;
+             process.stdout.write(text);
+          };
+
+          const renderFrame = () => {
+              eraseSticky();
+              if (printQueue.length > 0) {
+                  process.stdout.write(printQueue);
+                  printQueue = "";
+              }
+              streamAnimIdx++;
+              const baseText = state.currentSpinnerText || theme.dim('Thinking...');
+              const bChar = theme.accent ? theme.accent(bFrames[streamAnimIdx % bFrames.length]) : chalk.gray(bFrames[streamAnimIdx % bFrames.length]);
+              const sChar = theme.info ? theme.info(sFrames[streamAnimIdx % sFrames.length]) : chalk.cyan(sFrames[streamAnimIdx % sFrames.length]);
+              
+              drawSticky(`\n\n${bChar} ${sChar} ${baseText}` + getStickyBottomText(streamAnimIdx));
+          };
+
+          spinner.stop();
+          spinner.clear();
+          renderFrame(); // Instant draw to prevent blink!
+
+          // Independent Render Loop for ultra-smooth UI during TTFT and Stream (25 FPS)
+          const renderInterval = setInterval(() => {
+              if (isStreaming) renderFrame();
+          }, 40);
+
           const response = await aiClient.chat.completions.create({
             model: state.currentModel,
             messages: state.messages,
             tools: aiToolsConfig,
             tool_choice: "auto",
             max_tokens: parseInt(process.env.OUTPUT_CONTEXT_TOKENS || "8192", 10),
-            stream: false,
+            stream: true,
+            stream_options: { include_usage: true }
           }, { signal: abortController.signal });
 
-          const responseMessage = response.choices[0].message;
+          const responseMessage = { role: "assistant", content: "", tool_calls: [] };
           let currentInputTokens = 0;
           let currentOutputTokens = 0;
-          if (response.usage) {
-            state.modelTokenUsage[state.currentModel] = (state.modelTokenUsage[state.currentModel] || 0) + response.usage.total_tokens;
-            turnTokenUsage += response.usage.total_tokens;
-            currentInputTokens = response.usage.prompt_tokens || 0;
-            currentOutputTokens = response.usage.completion_tokens || 0;
-          }
-          state.messages.push(responseMessage);
+          let totalTokens = 0;
+          let usageObj = null;
 
-          if (responseMessage.content) {
-            safeLogMsg(`\n${renderWithLeftBorder(marked(responseMessage.content.trim()))}\n`);
-            if (response.usage) {
-              const leftBorder = theme.border ? theme.border('▌ ') : chalk.gray('▌ ');
-              const barString = leftBorder + getTokenBar(response.usage.total_tokens, currentInputTokens, currentOutputTokens);
-              safeLogMsg(`${barString}\n`);
+          let isNewLine = true;
+          let inThinking = false;
+          let inCodeBlock = false;
+          let codeBlockTicks = 0;
+          let buffer = "";
+
+          const flushBuffer = (text) => {
+              let out = "";
+              for (let i = 0; i < text.length; i++) {
+                  const char = text[i];
+                  
+                  if (char === '`') {
+                      codeBlockTicks++;
+                      if (codeBlockTicks === 3) {
+                          inCodeBlock = !inCodeBlock;
+                          codeBlockTicks = 0;
+                      }
+                  } else {
+                      codeBlockTicks = 0;
+                  }
+                  
+                  if (!inThinking || isDebug) {
+                      if (isNewLine) {
+                          out += inThinking ? chalk.gray('▌ ') : (theme.border ? theme.border('▌ ') : chalk.gray('▌ '));
+                          isNewLine = false;
+                      }
+                      
+                      if (inThinking) {
+                          out += chalk.gray(char);
+                      } else if (inCodeBlock || char === '`') {
+                          out += theme.highlight ? theme.highlight(char) : chalk.cyan(char);
+                      } else {
+                          out += chalk.whiteBright(char);
+                      }
+                      
+                      if (char === '\n') {
+                          isNewLine = true;
+                      }
+                  }
+              }
+              printQueue += out; 
+          };
+
+          for await (const chunk of response) {
+            if (isInterrupted) break;
+            
+            if (chunk.usage) {
+              usageObj = chunk.usage;
+              state.modelTokenUsage[state.currentModel] = (state.modelTokenUsage[state.currentModel] || 0) + usageObj.total_tokens;
+              turnTokenUsage += usageObj.total_tokens;
+              currentInputTokens = usageObj.prompt_tokens || 0;
+              currentOutputTokens = usageObj.completion_tokens || 0;
+              totalTokens = usageObj.total_tokens || 0;
             }
+
+            const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            if (!delta) continue;
+
+            if (delta.content) {
+              responseMessage.content += delta.content;
+              buffer += delta.content;
+
+              while (true) {
+                  if (!inThinking) {
+                      const idx = buffer.indexOf('<thinking>');
+                      if (idx !== -1) {
+                          flushBuffer(buffer.substring(0, idx));
+                          inThinking = true;
+                          buffer = buffer.substring(idx + '<thinking>'.length);
+                          if (isDebug) printQueue += theme.dim("\n🤔 Thinking...\n");
+                          isNewLine = true;
+                      } else {
+                          const idxAlt = buffer.indexOf('<thought>');
+                          if (idxAlt !== -1) {
+                              flushBuffer(buffer.substring(0, idxAlt));
+                              inThinking = true;
+                              buffer = buffer.substring(idxAlt + '<thought>'.length);
+                              if (isDebug) printQueue += theme.dim("\n🤔 Thinking...\n");
+                              isNewLine = true;
+                          } else {
+                              break;
+                          }
+                      }
+                  } else {
+                      const idx = buffer.indexOf('</thinking>');
+                      if (idx !== -1) {
+                          flushBuffer(buffer.substring(0, idx));
+                          inThinking = false;
+                          buffer = buffer.substring(idx + '</thinking>'.length);
+                          if (isDebug) printQueue += theme.dim("\n\n");
+                          isNewLine = true;
+                      } else {
+                          const idxAlt = buffer.indexOf('</thought>');
+                          if (idxAlt !== -1) {
+                              flushBuffer(buffer.substring(0, idxAlt));
+                              inThinking = false;
+                              buffer = buffer.substring(idxAlt + '</thought>'.length);
+                              if (isDebug) printQueue += theme.dim("\n\n");
+                              isNewLine = true;
+                          } else {
+                              break;
+                          }
+                      }
+                  }
+              }
+
+              const lastLess = buffer.lastIndexOf('<');
+              if (lastLess !== -1 && buffer.length - lastLess < 15) {
+                  flushBuffer(buffer.substring(0, lastLess));
+                  buffer = buffer.substring(lastLess);
+              } else {
+                  flushBuffer(buffer);
+                  buffer = "";
+              }
+            }
+
+            if (delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index;
+                if (!responseMessage.tool_calls[idx]) {
+                  responseMessage.tool_calls[idx] = {
+                     id: tc.id || "",
+                     type: tc.type || "function",
+                     function: { name: tc.function?.name || "", arguments: "" }
+                  };
+                } else {
+                  if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
+                  if (tc.function?.name) responseMessage.tool_calls[idx].function.name += tc.function.name;
+                  if (tc.function?.arguments) responseMessage.tool_calls[idx].function.arguments += tc.function.arguments;
+                }
+              }
+            }
+          }
+
+          isStreaming = false;
+          clearInterval(renderInterval);
+          eraseSticky();
+          
+          if (buffer) {
+              flushBuffer(buffer);
+          }
+          if (printQueue.length > 0) {
+              process.stdout.write(printQueue);
+          }
+          if (!isNewLine) {
+              process.stdout.write('\n\n');
+          } else {
+              process.stdout.write('\n');
           }
 
           if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {

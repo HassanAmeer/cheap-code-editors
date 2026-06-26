@@ -204,7 +204,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         let renderedLineText = lineText + ' '.repeat(padLen);
 
         if (placeholderShowing && i === 0) {
-          renderedLineText = '\x1b[90m\x1b[1m' + renderedLineText + '\x1b[0m';
+          renderedLineText = '\x1b[38;5;246m\x1b[1m' + renderedLineText + '\x1b[0m';
         }
 
         // Exact styling: left border + customMessageBg tint
