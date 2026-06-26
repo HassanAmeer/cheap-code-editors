@@ -131,6 +131,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: autoContinueMaxTimeName, value: '/auto_continue_max_time' },
         { name: '▶ final_run_test- Run dev server & Auto-Healer watcher', value: '/final_run_test' },
         { name: '✦ models        - Change AI Model', value: '/model' },
+        { name: '⊕ model_roles   - Assign Models per Role (plan/builder/fixer...)', value: '/model_roles' },
         { name: autoModelChoiceName, value: '/auto' },
         { name: '⬢ web agent     - Web Agent Task', value: '/web-agent' },
         { name: '↶ undo          - Undo the last edits', value: '/undo' },
@@ -212,6 +213,100 @@ export async function executeSlashCommand(cmdInput, ctx) {
       } else {
         return { action: 'redraw', message: theme.dim("\nModel selection cancelled.\n") };
       }
+    }
+
+    if (lowerCmd === '/model_roles') {
+      const { saveModelRoles } = await import('../history.mjs');
+      const roles = [
+        { key: 'plan',                label: 'Plan',               icon: '📋' },
+        { key: 'builder',             label: 'Builder',            icon: '🔨' },
+        { key: 'fixer',               label: 'Fixer',              icon: '🔧' },
+        { key: 'reviewer',            label: 'Reviewer',           icon: '🔍' },
+        { key: 'web_search',          label: 'Web Search Agent',   icon: '🌐' },
+        { key: 'system_agent',        label: 'System Agent',       icon: '⚙️ ' },
+      ];
+
+      // Current saved roles
+      const savedRoles = state.modelRoles || {};
+
+      console.log(theme.info('\n⊕ Model Roles Assignment\n'));
+      console.log(theme.dim(`  Current global model: ${state.currentModel}\n`));
+      console.log(theme.dim(`  Select a role to assign a specific model. Press Ctrl+C to cancel.\n`));
+
+      // Print current role assignments as a table
+      const colW = 22;
+      const modelColW = 38;
+      console.log(
+        theme.dim('  ┌' + '─'.repeat(colW) + '┬' + '─'.repeat(modelColW) + '┐')
+      );
+      console.log(
+        theme.dim('  │') + theme.info(' Role'.padEnd(colW - 1)) +
+        theme.dim('│') + theme.info(' Assigned Model'.padEnd(modelColW - 1)) +
+        theme.dim('│')
+      );
+      console.log(
+        theme.dim('  ├' + '─'.repeat(colW) + '┼' + '─'.repeat(modelColW) + '┤')
+      );
+      for (const r of roles) {
+        const assigned = savedRoles[r.key] || `(default: ${state.currentModel})`;
+        const roleCell = (r.icon + ' ' + r.label).padEnd(colW - 1);
+        const modelCell = assigned.substring(0, modelColW - 2).padEnd(modelColW - 1);
+        console.log(
+          theme.dim('  │') + theme.success(roleCell) +
+          theme.dim('│') + theme.user(modelCell) +
+          theme.dim('│')
+        );
+      }
+      console.log(
+        theme.dim('  └' + '─'.repeat(colW) + '┴' + '─'.repeat(modelColW) + '┘\n')
+      );
+
+      // Pick a role to configure
+      let selectedRoleKey;
+      try {
+        const roleChoices = [
+          ...roles.map(r => ({
+            name: theme.dim(`${r.icon} ${r.label.padEnd(20)} → ${(savedRoles[r.key] || 'default').substring(0, 38)}`),
+            value: r.key
+          })),
+          { name: theme.dim('🗑  Reset ALL roles to default'), value: '__reset__' },
+          { name: theme.dim('✕  Cancel'), value: '__cancel__' }
+        ];
+        selectedRoleKey = await select({
+          message: 'Select role to configure:',
+          choices: roleChoices,
+          theme: getPromptTheme()
+        });
+      } catch (e) {
+        return { action: 'continue' };
+      }
+
+      if (!selectedRoleKey || selectedRoleKey === '__cancel__') {
+        return { action: 'continue' };
+      }
+
+      if (selectedRoleKey === '__reset__') {
+        state.modelRoles = {};
+        await saveModelRoles({});
+        console.log(theme.success(`\n✔ All role model assignments reset to default (${state.currentModel})\n`));
+        return { action: 'continue' };
+      }
+
+      // Pick model for selected role
+      const groups = getModelsGroupedByProvider();
+      const roleInfo = roles.find(r => r.key === selectedRoleKey);
+      console.log(theme.info(`\n${roleInfo.icon} Selecting model for role: ${roleInfo.label}\n`));
+      const selectedModel = await gridPrompt(groups, savedRoles[selectedRoleKey] || state.currentModel);
+
+      if (selectedModel) {
+        const newRoles = { ...savedRoles, [selectedRoleKey]: selectedModel };
+        state.modelRoles = newRoles;
+        await saveModelRoles(newRoles);
+        console.log(theme.success(`\n✔ Role "${roleInfo.label}" assigned to model: ${selectedModel}\n`));
+      } else {
+        console.log(theme.dim('\nModel selection cancelled.\n'));
+      }
+      return { action: 'continue' };
     }
 
     if (lowerCmd === '/attach') {

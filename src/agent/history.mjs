@@ -162,3 +162,16 @@ export async function getThinkingHiddenSetting() {
         return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : true;
     } catch (err) { return true; }
 }
+
+export async function saveModelRoles(roles) {
+    try {
+        await updateGlobalState({ modelRoles: roles });
+    } catch (err) { }
+}
+
+export async function getModelRoles() {
+    try {
+        const state = await getGlobalState();
+        return state.modelRoles && typeof state.modelRoles === 'object' ? state.modelRoles : {};
+    } catch (err) { return {}; }
+}

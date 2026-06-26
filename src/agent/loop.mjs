@@ -24,7 +24,7 @@ marked.setOptions({
 });
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting } from './history.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -45,6 +45,7 @@ export async function startChatLoop() {
     isAutoPromptEnabled: await getAutoPromptSetting(),
     autoContinueMaxRetries: await getAutoContinueMaxTimeSetting(),
     isThinkingHidden: await getThinkingHiddenSetting(),
+    modelRoles: await getModelRoles(),
     messages: [],
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
@@ -482,8 +483,9 @@ export async function startChatLoop() {
       _browseRender();
 
       try {
-        const aiClient = getClientForModel(state.currentModel);
-        const webResults = await runAutoWebAgent(query, aiClient, state.currentModel, {
+        const webSearchModel = (state.modelRoles && state.modelRoles['web_search']) || state.currentModel;
+        const aiClient = getClientForModel(webSearchModel);
+        const webResults = await runAutoWebAgent(query, aiClient, webSearchModel, {
           closeBrowserBehavior: agentPrefs.closeBrowserBehavior,
           takeScreenshots: agentPrefs.takeScreenshots,
           executionMode: 'auto',
@@ -683,7 +685,13 @@ export async function startChatLoop() {
       try {
         let prevMessagesLength = state.messages.length;
         try {
-          const aiClient = getClientForModel(state.currentModel);
+          // Determine effective model: use role-specific model if set
+          const currentTeamModeName = (['plan','builder','fixer','reviewer','plan+build','plan+build+fix','plan+build+fix+review'][state.teamModeIndex - 1] || 'plan');
+          const roleModel = state.modelRoles && state.modelRoles[currentTeamModeName];
+          const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
+          const systemModel = state.modelRoles && state.modelRoles['system_agent'];
+          const effectiveModel = roleModel || state.currentModel;
+          const aiClient = getClientForModel(effectiveModel);
 
           let isStreaming = true;
           const responseMessage = { role: "assistant", content: "", tool_calls: [] };
@@ -798,7 +806,7 @@ export async function startChatLoop() {
           }, 40);
 
           const response = await aiClient.chat.completions.create({
-            model: state.currentModel,
+            model: effectiveModel,
             messages: state.messages,
             tools: aiToolsConfig,
             tool_choice: "auto",

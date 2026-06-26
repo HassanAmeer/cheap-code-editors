@@ -56,7 +56,8 @@ const StateAnnotation = {
   currentTheme: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'cheap' },
   deletedSkills: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
   autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 },
-  isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true }
+  isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
+  modelRoles: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) }
 };
 
 const builder = new StateGraph({ channels: StateAnnotation })
