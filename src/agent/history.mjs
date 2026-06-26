@@ -136,3 +136,16 @@ export async function getAutoPromptSetting() {
         return state.isAutoPromptEnabled !== undefined && state.isAutoPromptEnabled !== null ? state.isAutoPromptEnabled : false;
     } catch (err) { return false; }
 }
+
+export async function saveAutoContinueMaxTimeSetting(value) {
+    try {
+        await updateGlobalState({ autoContinueMaxRetries: value });
+    } catch (err) { }
+}
+
+export async function getAutoContinueMaxTimeSetting() {
+    try {
+        const state = await getGlobalState();
+        return state.autoContinueMaxRetries !== undefined && state.autoContinueMaxRetries !== null ? state.autoContinueMaxRetries : 3;
+    } catch (err) { return 3; }
+}

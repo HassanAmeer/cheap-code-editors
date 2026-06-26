@@ -113,6 +113,8 @@ export async function executeSlashCommand(cmdInput, ctx) {
         ? '⇄ auto models   - Auto Model Switching: ON'
         : '⇄ auto models   - Auto Model Switching: OFF';
 
+      const autoContinueMaxTimeName = `⟲ auto retries  - Auto Continue Max Retries: ${state.autoContinueMaxRetries}`;
+
       const rawChoices = [
         { name: '⊘ clear         - Clear terminal and preserve memory', value: '/clear' },
         { name: '⎇ new           - Clear terminal + start new session', value: '/new' },
@@ -122,6 +124,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '⇪ commit        - Git Auto-Pilot (Commit & Push)', value: '/commit' },
         { name: teamChoiceName, value: '/team' },
         { name: autoContChoiceName, value: '/auto_continue' },
+        { name: autoContinueMaxTimeName, value: '/auto_continue_max_time' },
         { name: '▶ final_run_test- Run dev server & Auto-Healer watcher', value: '/final_run_test' },
         { name: '✦ models        - Change AI Model', value: '/model' },
         { name: autoModelChoiceName, value: '/auto' },
@@ -681,6 +684,17 @@ Instructions for you (The Architect):
       console.log(theme.success(`✔ Infinite Auto Continue Mode: OFF`));
     }
     return { action: 'continue' };
+  }
+  if (lowerCmd === '/auto_continue_max_time') {
+    let currentVal = state.autoContinueMaxRetries !== undefined ? state.autoContinueMaxRetries : 3;
+    currentVal++;
+    if (currentVal > 10) currentVal = 0;
+    state.autoContinueMaxRetries = currentVal;
+    
+    const { saveAutoContinueMaxTimeSetting } = await import('./history.mjs');
+    await saveAutoContinueMaxTimeSetting(currentVal);
+    
+    return { action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) };
   }
   if (lowerCmd === '/delete_chats') {
     let spinner = null;

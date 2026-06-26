@@ -24,7 +24,7 @@ marked.setOptions({
 });
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting } from './history.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -43,6 +43,7 @@ export async function startChatLoop() {
   const state = {
     autoPermissionMode: await getAutoPermissionSetting(),
     isAutoPromptEnabled: await getAutoPromptSetting(),
+    autoContinueMaxRetries: await getAutoContinueMaxTimeSetting(),
     messages: [],
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
@@ -512,6 +513,7 @@ export async function startChatLoop() {
 
     state.selectedFilePath = null;
     let turnIsActive = true;
+    let autoContinueCurrentRetries = 0;
     let turnLoopCount = 0;
     let turnTokenUsage = 0;
     const MAX_TURN_LOOPS = 20;
@@ -958,8 +960,12 @@ export async function startChatLoop() {
             turnIsActive = false;
           } else {
             safeLogMsg(theme.error(`\n❌ AI Error: ${apiErr.message}\n`));
-            if (state.isAutoContinueEnabled) {
-              safeLogMsg(theme.info("🔄 Auto-Continue Mode is ON. Feeding error back to AI..."));
+            if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {
+              autoContinueCurrentRetries++;
+              safeLogMsg(theme.info(`🔄 Auto-Retry on Error (${autoContinueCurrentRetries}/${state.autoContinueMaxRetries}). Feeding error back to AI...`));
+              state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
+            } else if (state.isAutoContinueEnabled) {
+              safeLogMsg(theme.info("🔄 Infinite Auto-Continue Mode is ON. Feeding error back to AI..."));
               state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
             } else {
               state.messages = state.messages.slice(0, prevMessagesLength);
