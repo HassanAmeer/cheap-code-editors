@@ -24,7 +24,7 @@ marked.setOptions({
 });
 import { printLogo, } from '../ui/logo.mjs';
 import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles } from './history.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -46,6 +46,7 @@ export async function startChatLoop() {
     autoContinueMaxRetries: await getAutoContinueMaxTimeSetting(),
     isThinkingHidden: await getThinkingHiddenSetting(),
     modelRoles: await getModelRoles(),
+    tokenUsageLimit: await getTokenUsageLimitSetting(),
     messages: [],
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
@@ -535,9 +536,9 @@ export async function startChatLoop() {
       try {
         const { getRagContext } = await import('./db.mjs');
         const { PROJECTS_DIR } = await import('../tools/file-system.mjs');
-        
+
         const prefetchData = await getRagContext(query, PROJECTS_DIR);
-        
+
         if (prefetchData) {
           userMsgObj.content += `\n\n[SYSTEM AUTO-PREFETCH]\nBased on your query, here is some automatically retrieved context that might help:\n${prefetchData}\n[/SYSTEM AUTO-PREFETCH]`;
           console.log(theme.dim(`✔ Pre-fetched Memory & CodeGraph context injected.`));
@@ -554,6 +555,15 @@ export async function startChatLoop() {
     console.log(theme.accent('🫥 ') + '❯ ' + userPrintText + '\n');
 
     while (turnIsActive && turnLoopCount < MAX_TURN_LOOPS) {
+      const totalUsed = Object.values(state.modelTokenUsage || {}).reduce((a, b) => a + b, 0);
+      if (state.tokenUsageLimit > 0 && totalUsed >= state.tokenUsageLimit) {
+        console.log('\n' + theme.warning(`┌────────────────────────────────────────────────────────┐
+│ ⚠️  Warning: Your set usage limit is reached!           │
+│ Limit: ${state.tokenUsageLimit.toLocaleString()} tokens. Used: ${totalUsed.toLocaleString()} tokens.         │
+└────────────────────────────────────────────────────────┘`) + '\n');
+        turnIsActive = false;
+        break;
+      }
       turnLoopCount++;
       const abortController = new AbortController();
       currentAbortController = abortController;
@@ -686,9 +696,11 @@ export async function startChatLoop() {
 
       try {
         let prevMessagesLength = state.messages.length;
+        let renderInterval;
+        let eraseStickyFn;
         try {
           // Determine effective model: use role-specific model if set
-          const TEAM_MODE_NAMES = ['researcher','system_agent','plan','builder','fixer','reviewer','plan+build','plan+build+fix','plan+build+fix+review'];
+          const TEAM_MODE_NAMES = ['researcher', 'system_agent', 'plan', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review'];
           const currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'plan';
           const roleModel = state.modelRoles && state.modelRoles[currentTeamModeName];
           const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
@@ -731,6 +743,7 @@ export async function startChatLoop() {
 
             stickyLinesCount = 0;
           };
+          eraseStickyFn = eraseSticky;
 
           const renderFrame = () => {
             eraseSticky();
@@ -804,7 +817,7 @@ export async function startChatLoop() {
           renderFrame(); // Instant draw to prevent blink!
 
           // Independent Render Loop for ultra-smooth UI during TTFT and Stream (25 FPS)
-          const renderInterval = setInterval(() => {
+          renderInterval = setInterval(() => {
             if (isStreaming) renderFrame();
           }, 40);
 
@@ -838,22 +851,22 @@ export async function startChatLoop() {
             }
 
             if (delta.tool_calls) {
-               if (!responseMessage.tool_calls) responseMessage.tool_calls = [];
-               for (const tc of delta.tool_calls) {
-                 const idx = tc.index;
-                 if (!responseMessage.tool_calls[idx]) {
-                   responseMessage.tool_calls[idx] = {
-                     id: tc.id || "",
-                     type: tc.type || "function",
-                     function: { name: tc.function?.name || "", arguments: "" }
-                   };
-                 } else {
-                   if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
-                   if (tc.function?.name) responseMessage.tool_calls[idx].function.name += tc.function.name;
-                   if (tc.function?.arguments) responseMessage.tool_calls[idx].function.arguments += tc.function.arguments;
-                 }
-               }
-             }
+              if (!responseMessage.tool_calls) responseMessage.tool_calls = [];
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index;
+                if (!responseMessage.tool_calls[idx]) {
+                  responseMessage.tool_calls[idx] = {
+                    id: tc.id || "",
+                    type: tc.type || "function",
+                    function: { name: tc.function?.name || "", arguments: "" }
+                  };
+                } else {
+                  if (tc.id) responseMessage.tool_calls[idx].id += tc.id;
+                  if (tc.function?.name) responseMessage.tool_calls[idx].function.name += tc.function.name;
+                  if (tc.function?.arguments) responseMessage.tool_calls[idx].function.arguments += tc.function.arguments;
+                }
+              }
+            }
           }
 
           isStreaming = false;
@@ -917,12 +930,12 @@ export async function startChatLoop() {
               if (toolResult === "__PLAN_CREATED__") {
                 spinner.stop();
                 process.stdin.removeListener("keypress", preInputCollector);
-                
+
                 try {
                   const { select, input } = await import('@inquirer/prompts');
                   const { getPromptTheme } = await import('../ui/theme.mjs');
                   const chalk = (await import('chalk')).default;
-                  
+
                   const action = await select({
                     message: 'Please review the generated plan in your browser:',
                     choices: [
@@ -957,7 +970,7 @@ export async function startChatLoop() {
                   // User aborted the prompt
                   turnIsActive = false;
                 }
-                
+
                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
                 process.stdin.on("keypress", preInputCollector);
               }
@@ -996,6 +1009,9 @@ export async function startChatLoop() {
 
           saveChatHistory(state.chatId, state.messages, state.currentModel);
         } catch (apiErr) {
+          if (renderInterval) clearInterval(renderInterval);
+          if (eraseStickyFn) eraseStickyFn();
+
           if (apiErr.name === 'AbortError' || isInterrupted) {
             safeLogMsg(theme.warning("⚠️ Turn cancelled."));
             state.messages.push({ role: "system", content: "User interrupted the task." });

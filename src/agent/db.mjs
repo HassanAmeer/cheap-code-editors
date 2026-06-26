@@ -72,7 +72,8 @@ const StateAnnotation = {
   deletedSkills: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
   autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 },
   isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
-  modelRoles: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) }
+  modelRoles: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) },
+  tokenUsageLimit: { reducer: (x, y) => y !== undefined ? y : x, default: () => 0 }
 };
 
 const builder = new StateGraph({ channels: StateAnnotation })

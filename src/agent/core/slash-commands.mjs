@@ -67,6 +67,21 @@ async function chooseDirectoryInteractive(currentPath) {
   }
 }
 
+function parseTokenInput(val) {
+  if (!val) return null;
+  const clean = val.trim().toLowerCase();
+  if (clean.endsWith('k')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? null : Math.round(num * 1000);
+  }
+  if (clean.endsWith('m')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? null : Math.round(num * 1000000);
+  }
+  const num = parseInt(clean, 10);
+  return isNaN(num) ? null : num;
+}
+
 export async function executeSlashCommand(cmdInput, ctx) {
   const {
     state,
@@ -115,6 +130,10 @@ export async function executeSlashCommand(cmdInput, ctx) {
 
       const autoContinueMaxTimeName = `⟲ auto retries  - Auto Continue Max Retries: ${state.autoContinueMaxRetries}`;
 
+      const usageLimitChoiceName = state.tokenUsageLimit !== undefined && state.tokenUsageLimit > 0
+        ? `⚙ usage_limit   - Set Token Usage Limit: ${state.tokenUsageLimit.toLocaleString()} tokens`
+        : `⚙ usage_limit   - Set Token Usage Limit: OFF`;
+
       const thinkingHiddenChoiceName = state.isThinkingHidden
         ? '👁 hide_thinking  - Hide AI Thinking Blocks: ON'
         : '👁 hide_thinking  - Hide AI Thinking Blocks: OFF';
@@ -129,11 +148,13 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: teamChoiceName, value: '/team' },
         { name: autoContChoiceName, value: '/auto_continue' },
         { name: autoContinueMaxTimeName, value: '/auto_continue_max_time' },
+        { name: usageLimitChoiceName, value: '/usage_limit' },
         { name: '▶ final_run_test- Run dev server & Auto-Healer watcher', value: '/final_run_test' },
         { name: '✦ models        - Change AI Model', value: '/model' },
         { name: '⊕ model_roles   - Assign Models per Role (plan/builder/fixer...)', value: '/model_roles' },
         { name: autoModelChoiceName, value: '/auto' },
         { name: '⬢ web agent     - Web Agent Task', value: '/web-agent' },
+        { name: '🎤 voice        - Start voice recording for Voice to Code (auto-downloads model on first run)', value: '/voice' },
         { name: '↶ undo          - Undo the last edits', value: '/undo' },
         { name: `± diff          - Review git changes in ${process.env.DEBUG === 'true' ? 'projects' : 'workspace'} directory`, value: '/diff' },
         { name: '⏣ test_proj     - Start an auto-fix testing loop on project', value: '/test_proj' },
@@ -793,6 +814,57 @@ Instructions for you (The Architect):
 
     return { action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) };
   }
+  if (lowerCmd === '/usage_limit') {
+    let currentLimit = state.tokenUsageLimit || 0;
+    const { saveTokenUsageLimitSetting } = await import('../history.mjs');
+
+    while (true) {
+      const displayVal = currentLimit === 0 ? theme.dim('OFF') : theme.accent(`${currentLimit.toLocaleString()} tokens`);
+      const choice = await select({
+        message: `Set Token Usage Limit (Current: ${displayVal}):`,
+        choices: [
+          { name: `➕ Increase limit (+10,000 tokens)`, value: 'add_10k' },
+          { name: `➕ Increase limit (+100,000 tokens)`, value: 'add_100k' },
+          { name: `➕ Increase limit (+1,000,000 tokens)`, value: 'add_1m' },
+          { name: `➖ Decrease limit (-10,000 tokens)`, value: 'sub_10k' },
+          { name: `➖ Decrease limit (-100,000 tokens)`, value: 'sub_100k' },
+          { name: `✍️ Enter Custom Value (e.g. 50k, 1.5M, 500000)`, value: 'custom' },
+          { name: `❌ Disable/Reset Limit`, value: 'disable' },
+          { name: `💾 Save & Exit`, value: 'save' }
+        ]
+      });
+
+      if (choice === 'add_10k') {
+        currentLimit += 10000;
+      } else if (choice === 'add_100k') {
+        currentLimit += 100000;
+      } else if (choice === 'add_1m') {
+        currentLimit += 1000000;
+      } else if (choice === 'sub_10k') {
+        currentLimit = Math.max(0, currentLimit - 10000);
+      } else if (choice === 'sub_100k') {
+        currentLimit = Math.max(0, currentLimit - 100000);
+      } else if (choice === 'disable') {
+        currentLimit = 0;
+        console.log(theme.success('\n✔ Limit disabled.\n'));
+      } else if (choice === 'custom') {
+        const customInput = await input({
+          message: 'Enter token amount (e.g. 50000, 50k, 1.5m):'
+        });
+        const parsed = parseTokenInput(customInput);
+        if (parsed !== null) {
+          currentLimit = parsed;
+          console.log(theme.success(`\n✔ Limit set to: ${currentLimit.toLocaleString()} tokens\n`));
+        } else {
+          console.log(theme.error('\n❌ Invalid input. Please enter numbers or formats like 50k / 1.5M.\n'));
+        }
+      } else if (choice === 'save') {
+        state.tokenUsageLimit = currentLimit;
+        await saveTokenUsageLimitSetting(currentLimit);
+        return { action: 'redraw', message: theme.success(`\n✔ Token Usage Limit saved: ${currentLimit === 0 ? 'OFF' : currentLimit.toLocaleString() + ' tokens'}\n`) };
+      }
+    }
+  }
   if (lowerCmd === '/delete_chats') {
     let spinner = null;
     try {
@@ -1156,6 +1228,232 @@ Extensions
       } else {
         console.log(theme.error(`\n❌ Import failed: ${e.message}\n`));
       }
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/voice') {
+    try {
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const fsModule = await import('fs');
+      const osModule = await import('os');
+      const childProcessModule = await import('child_process');
+      const { spawn } = childProcessModule;
+
+      const homedir = osModule.homedir();
+      const voiceDepsPath = path.join(homedir, ".cheap", "voice-deps");
+
+      if (!fsModule.existsSync(voiceDepsPath)) {
+        fsModule.mkdirSync(voiceDepsPath, { recursive: true });
+        fsModule.writeFileSync(path.join(voiceDepsPath, "package.json"), JSON.stringify({ name: "voice-deps", private: true }));
+      }
+
+      const transformersPath = path.join(voiceDepsPath, "node_modules", "@xenova/transformers");
+      const recordPath = path.join(voiceDepsPath, "node_modules", "node-record-lpcm16");
+
+      if (!fsModule.existsSync(transformersPath) || !fsModule.existsSync(recordPath)) {
+        let spinner = ora({ text: theme.dim("Downloading voice dependencies... (This might take a moment)"), color: false }).start();
+        try {
+          await execAsync("bun install @xenova/transformers node-record-lpcm16", { cwd: voiceDepsPath });
+          spinner.succeed(theme.success("Dependencies downloaded successfully!"));
+        } catch (err) {
+          spinner.fail(theme.error("Failed to install dependencies."));
+          console.log(theme.error(`❌ Error installing dependencies: ${err.message}. Please check your internet connection.`));
+          return { action: 'continue' };
+        }
+      }
+
+      const record = require(recordPath);
+
+      // Ensure sox is installed, as it is required by node-record-lpcm16 on macOS
+      try {
+        await execAsync("which sox");
+      } catch (err) {
+        let spinner = ora({ text: theme.dim("Sox not found. Auto-installing via Homebrew... (Please wait)"), color: false }).start();
+        try {
+          await execAsync("brew install sox");
+          spinner.succeed(theme.success("Sox installed successfully!"));
+        } catch (brewErr) {
+          spinner.fail(theme.error("Failed to auto-install sox."));
+          console.log(theme.error("❌ Failed to auto-install sox. Please install it manually using: `brew install sox`"));
+          return { action: 'continue' };
+        }
+      }
+
+      const audioPath = path.join(osModule.tmpdir(), "voice_input.wav");
+      const file = fsModule.createWriteStream(audioPath, { encoding: "binary" });
+
+      // Record audio using node-record-lpcm16
+      const recording = record.record({
+        sampleRate: 16000,
+        channels: 1,
+        audioType: "raw", // whisper expects raw PCM
+      });
+
+      recording.stream().pipe(file);
+
+      // Wait 800ms for Sox to initialize before telling the user to speak
+      await new Promise(r => setTimeout(r, 800));
+      console.log('\n' + theme.success("🎤 Recording started! Speak now... (Press ENTER or Ctrl+C to stop)") + '\n');
+
+      // Wait for user input to stop
+      let sigintHandler;
+      let wasCancelled = false;
+      const stdin = process.stdin;
+      const wasRaw = stdin.isTTY ? !!stdin.isRaw : false;
+      if (stdin.isTTY) {
+        stdin.setRawMode(true);
+      }
+      stdin.resume();
+
+      await new Promise((resolve) => {
+        const handleInput = (key) => {
+          if (
+            key.toString() === "\n" ||
+            key.toString() === "\r" ||
+            key.toString() === "\r\n" ||
+            key[0] === 13 ||
+            key[0] === 10 ||
+            key[0] === 3
+          ) {
+            if (key[0] === 3) {
+              wasCancelled = true;
+              recording.stop();
+              resolve();
+            } else {
+              // Wait 800ms to capture trailing audio before stopping
+              setTimeout(() => {
+                let streamClosed = false;
+                const done = () => {
+                  if (!streamClosed) {
+                    streamClosed = true;
+                    resolve();
+                  }
+                };
+                file.on('close', done);
+                file.on('finish', done);
+                recording.stop();
+                setTimeout(done, 1000); // 1s fallback
+              }, 800);
+            }
+          }
+        };
+        sigintHandler = () => {
+          recording.stop();
+          wasCancelled = true;
+          resolve();
+        };
+        stdin.on("data", handleInput);
+        process.once("SIGINT", sigintHandler);
+
+        // Clean up listeners when done
+        const originalResolve = resolve;
+        resolve = () => {
+          stdin.off("data", handleInput);
+          process.off("SIGINT", sigintHandler);
+          if (stdin.isTTY) {
+            stdin.setRawMode(wasRaw);
+          }
+          originalResolve();
+        };
+      });
+
+      if (wasCancelled) {
+        console.log('\n' + theme.warning("⚠️ Recording cancelled.") + '\n');
+        return { action: 'continue' };
+      }
+
+      let transcribeSpinner = ora({ text: theme.dim("⏳ Processing voice and transcribing..."), color: false }).start();
+
+      try {
+        const resultPath = path.join(osModule.tmpdir(), "voice_result_" + Date.now() + ".json");
+        const script = `
+          const fs = require("node:fs");
+          const { pipeline, env } = require("${transformersPath.replace(/\\/g, "\\\\")}");
+          env.allowLocalModels = false;
+          env.useBrowserCache = false;
+          async function run() {
+            try {
+              const stat = fs.statSync("${audioPath.replace(/\\/g, "\\\\")}");
+              if (stat.size === 0) {
+                fs.writeFileSync("${resultPath.replace(/\\/g, "\\\\")}", JSON.stringify({ error: "Audio file is empty. Microphone might not be capturing." }));
+                return;
+              }
+              const t = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny");
+              const buf = fs.readFileSync("${audioPath.replace(/\\/g, "\\\\")}");
+              const f32 = new Float32Array(buf.length / 2);
+              for(let i=0; i<buf.length/2; i++) f32[i] = buf.readInt16LE(i*2) / 32768.0;
+              const res = await t(f32, { language: "urdu" });
+              fs.writeFileSync("${resultPath.replace(/\\/g, "\\\\")}", JSON.stringify({ text: res.text }));
+            } catch(e) {
+              fs.writeFileSync("${resultPath.replace(/\\/g, "\\\\")}", JSON.stringify({ error: e.message }));
+            }
+          }
+          run();
+        `;
+
+        let stderrData = "";
+        const worker = spawn(process.execPath, ["-e", script], {
+          stdio: ["ignore", "ignore", "pipe"], // capture stderr, ignore stdin/stdout
+        });
+
+        worker.stderr.on("data", (chunk) => {
+          stderrData += chunk.toString();
+        });
+
+        let isTimedOut = false;
+        const timeout = setTimeout(() => {
+          isTimedOut = true;
+          worker.kill();
+        }, 45000);
+
+        await new Promise((resolve, reject) => {
+          worker.on("close", (code) => {
+            clearTimeout(timeout);
+            if (isTimedOut) {
+              reject(new Error("Transcription timed out after 45 seconds. Please try again."));
+            } else if (code !== 0) {
+              const actualErrors = stderrData
+                .split('\n')
+                .filter(line => !line.includes('onnxruntime') && line.trim())
+                .join('\n');
+              reject(new Error(actualErrors || `Worker exited with code ${code}`));
+            } else {
+              resolve();
+            }
+          });
+          worker.on("error", (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+
+        const resultStr = fsModule.readFileSync(resultPath, "utf-8");
+        const result = JSON.parse(resultStr);
+        fsModule.unlinkSync(resultPath);
+
+        if (result.error) {
+          transcribeSpinner.fail(theme.error(`Error transcribing: ${result.error}`));
+          return { action: 'continue' };
+        }
+
+        const text = result.text?.trim();
+        if (text) {
+          transcribeSpinner.succeed(theme.success("Transcription complete!"));
+          console.log('\n' + theme.accent("Transcribed Text: ") + theme.info(text) + '\n');
+          return { action: 'done', query: text };
+        } else {
+          transcribeSpinner.fail(theme.error("⚠️ No speech detected."));
+          return { action: 'continue' };
+        }
+      } catch (err) {
+        transcribeSpinner.fail(theme.error(`Error transcribing: ${err.message}`));
+      } finally {
+        try { fsModule.unlinkSync(audioPath); } catch (e) { }
+      }
+    } catch (err) {
+      console.log(theme.error(`❌ Voice handler failed: ${err.message}`));
     }
     return { action: 'continue' };
   }

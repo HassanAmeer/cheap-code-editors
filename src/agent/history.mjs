@@ -175,3 +175,16 @@ export async function getModelRoles() {
         return state.modelRoles && typeof state.modelRoles === 'object' ? state.modelRoles : {};
     } catch (err) { return {}; }
 }
+
+export async function saveTokenUsageLimitSetting(value) {
+    try {
+        await updateGlobalState({ tokenUsageLimit: value });
+    } catch (err) { }
+}
+
+export async function getTokenUsageLimitSetting() {
+    try {
+        const state = await getGlobalState();
+        return state.tokenUsageLimit !== undefined && state.tokenUsageLimit !== null ? state.tokenUsageLimit : 0;
+    } catch (err) { return 0; }
+}
