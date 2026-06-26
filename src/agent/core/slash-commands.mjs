@@ -478,7 +478,10 @@ Instructions for you (The Architect):
 
       if (scriptName && scriptName.trim()) {
         const projectsDir = PROJECTS_DIR;
-        await startAutoHealer(scriptName.trim(), projectsDir, state.currentModel);
+        const result = await startAutoHealer(scriptName.trim(), projectsDir, state.currentModel);
+        if (result && result.hasError) {
+          return { action: 'done', query: result.instruction };
+        }
       } else {
         console.log(theme.error("Usage: /final_run_test <script-name> (e.g. /final_run_test dev)"));
       }

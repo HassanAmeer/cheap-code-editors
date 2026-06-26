@@ -223,5 +223,58 @@ export const aiToolsConfig = [
         required: ["query"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_codegraph",
+      description: "Search for symbols in the codebase index. Provide a search query.",
+      parameters: {
+        type: "object",
+        properties: {
+          searchQuery: { type: "string" }
+        },
+        required: ["searchQuery"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "explore_codegraph",
+      description: "Explore an area: get relevant symbols' source + call paths in one shot.",
+      parameters: {
+        type: "object",
+        properties: {
+          exploreQuery: { type: "string" }
+        },
+        required: ["exploreQuery"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "view_codegraph_node",
+      description: "Get one symbol's source + caller/callee trail, or read a file with line numbers + dependents.",
+      parameters: {
+        type: "object",
+        properties: {
+          nodeName: { type: "string" }
+        },
+        required: ["nodeName"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "init_codegraph",
+      description: "Initialize or sync the CodeGraph index for the project.",
+      parameters: {
+        type: "object",
+        properties: {}
+      }
+    }
   }
 ];

@@ -6,7 +6,6 @@ import { theme, getPromptTheme } from '../ui/theme.mjs';
 import ora from 'ora';
 import chalk from 'chalk';
 import { confirm } from '@inquirer/prompts';
-import { loadPersistentMemory } from '../../custom-memory/memory1.mjs';
 import { checkAndInstallMissingDependencies } from './loop.mjs';
 
 // Auto Healer Watcher Process
@@ -100,65 +99,22 @@ export async function startAutoHealer(scriptName, projectsDir, currentModel = "b
       
       try {
         const proceed = await confirm({ 
-          message: 'Should Doctor-Memory analyze and fix this error automatically?', 
+          message: 'Should Doctor-Memory analyze and fix this error automatically using CodeGraph?', 
           default: true, 
           theme: getPromptTheme() 
         });
 
         if (proceed) {
-          console.log(theme.info("\n🔍 Doctor-Memory is analyzing the error trace..."));
+          console.log(theme.info("\n🔍 Passing error trace to AI for CodeGraph analysis..."));
           const errorTrace = rollingBuffer.join('\n');
           
-          let agentPersistentMemory = await loadPersistentMemory();
-          let instruction = `The server crashed or threw an error. Here is the recent server output and error trace:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n\nPlease analyze this error, find the relevant files, and fix it.`;
+          let instruction = `The server crashed or threw an error. Here is the recent server output and error trace:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n\nPlease use the codegraph tools to analyze this error in the codebase, find the relevant files/functions, and then use edit_file or replace_lines_in_file to fix it.`;
           
-          const memoryMode = process.env.MEMORY_MODE || 'both';
-          if ((memoryMode === 'both' || memoryMode === 'custom_only') && agentPersistentMemory.trim() !== '') {
-            instruction = `[System Memory Context:\n${agentPersistentMemory}\n]\n\nUser Task: ${instruction}`;
-          }
-
-          const msgFile = path.join(os.tmpdir(), `aider_msg_${Date.now()}.txt`);
-          await fs.promises.writeFile(msgFile, instruction, 'utf8');
-
-          const argsArr = [
-            "uvx", "aider-chat",
-            "--message-file", msgFile,
-            "--yes", "--no-auto-commits",
-            "--model", currentModel
-          ];
-
-          if (memoryMode === 'custom_only') {
-            argsArr.push("--chat-history-file", "/dev/null");
-          }
-
-          process.removeListener('SIGINT', handleSigint);
-
-          const aiderProc = spawn(argsArr[0], argsArr.slice(1), {
-            cwd: projectsDir,
-            shell: process.platform === 'win32',
-            stdio: 'inherit' // Show aider output directly to user
-          });
-
-          const exitCode = await new Promise((resolveAider) => {
-            aiderProc.on('close', (code) => resolveAider(code));
-          });
+          // Stop the server process so the AI can take over
+          cleanup();
           
-          process.once('SIGINT', handleSigint);
-
-          try { await fs.promises.unlink(msgFile); } catch (e) {}
-
-          if (exitCode === 0) {
-            console.log(theme.success("\n✔ Doctor-Memory finished successfully."));
-          } else {
-            console.log(theme.error(`\n❌ Doctor-Memory failed or was cancelled (Exit Code ${exitCode}).`));
-          }
-          
-          // Optionally check dependencies if Doctor-Memory added any
-          if (typeof checkAndInstallMissingDependencies === 'function') {
-            await checkAndInstallMissingDependencies(projectsDir);
-          }
-
-          console.log(theme.info("🔄 Note: If your app supports Hot-Reloading, the fix should apply automatically. Otherwise, please restart the server."));
+          // Resolve with the error instruction so the main loop can inject it
+          return resolve({ hasError: true, instruction });
         } else {
           console.log(theme.dim("Skipping auto-fix."));
         }
@@ -170,7 +126,7 @@ export async function startAutoHealer(scriptName, projectsDir, currentModel = "b
         }
       }
 
-      // Reset buffer and resume watching
+      // Reset buffer and resume watching if we didn't resolve
       rollingBuffer = [];
       isHandlingError = false;
       errorDetectionTimer = null;

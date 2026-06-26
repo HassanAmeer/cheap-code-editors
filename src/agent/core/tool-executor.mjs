@@ -12,7 +12,7 @@ import { editFile, undoAction, replaceLines, markFileAsCreated } from '../../too
 import { searchWebWithFreeSearchAPI } from '../../searches/whole-web-search/api.mjs';
 import { fetchWebsiteDirectly } from '../../searches/duckduck-web-search/scraper.mjs';
 import { readSkillContent } from '../../tools/skills.mjs';
-import { savePersistentMemory } from '../../../custom-memory/memory1.mjs';
+import { queryCodegraph, exploreCodegraph, viewCodegraphNode, initCodegraph } from '../../tools/codegraph.mjs';
 import { runAutoWebAgent } from '../../playwright-web-agent-settings/index.mjs';
 import { playNotification } from '../../ui/sound.mjs';
 import { raceAbort, spawnAndCollect, checkAndInstallMissingDependencies } from '../utils/process.mjs';
@@ -160,6 +160,30 @@ export async function executeTool(toolName, args, ctx) {
     state.currentSpinnerText = theme.dim(`Reading skill: ${args.skillName}`);
     const res = await raceAbort(readSkillContent(args.skillName), abortController.signal);
     safeLog(() => console.log(theme.dim(`✔ Read skill: ${args.skillName}`)));
+    return res;
+  }
+  else if (toolName === "query_codegraph") {
+    state.currentSpinnerText = theme.dim(`Querying CodeGraph: ${args.searchQuery}`);
+    const res = await raceAbort(queryCodegraph(args.searchQuery, PROJECTS_DIR), abortController.signal);
+    safeLog(() => console.log(theme.dim(`✔ Queried CodeGraph`)));
+    return res;
+  }
+  else if (toolName === "explore_codegraph") {
+    state.currentSpinnerText = theme.dim(`Exploring CodeGraph: ${args.exploreQuery}`);
+    const res = await raceAbort(exploreCodegraph(args.exploreQuery, PROJECTS_DIR), abortController.signal);
+    safeLog(() => console.log(theme.dim(`✔ Explored CodeGraph`)));
+    return res;
+  }
+  else if (toolName === "view_codegraph_node") {
+    state.currentSpinnerText = theme.dim(`Viewing CodeGraph node: ${args.nodeName}`);
+    const res = await raceAbort(viewCodegraphNode(args.nodeName, PROJECTS_DIR), abortController.signal);
+    safeLog(() => console.log(theme.dim(`✔ Viewed CodeGraph node`)));
+    return res;
+  }
+  else if (toolName === "init_codegraph") {
+    state.currentSpinnerText = theme.dim(`Initializing CodeGraph`);
+    const res = await raceAbort(initCodegraph(PROJECTS_DIR), abortController.signal);
+    safeLog(() => console.log(theme.dim(`✔ Initialized CodeGraph`)));
     return res;
   }
   else if (toolName === "update_memory") {
