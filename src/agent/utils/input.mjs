@@ -406,11 +406,61 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         return;
       }
 
+      // Shift+C → Charm the text (AI enhance)
+      if (key && key.name === 'c' && key.shift) {
+        if (!state) return;
+        if (buffer.trim().length === 0) {
+          const origBuffer = buffer;
+          buffer = "[Please write something to charm]";
+          cursorPos = buffer.length;
+          renderLineSync();
+          setTimeout(() => {
+            buffer = origBuffer;
+            cursorPos = buffer.length;
+            renderLineSync();
+          }, 2000);
+          return;
+        }
+
+        const origBuffer = buffer;
+        buffer = origBuffer + "\n[✨ Charming your prompt...]";
+        renderLineSync();
+
+        import('../../providers/index.mjs').then(({ getClientForModel }) => {
+          const aiClient = getClientForModel(state.currentModel);
+          return aiClient.chat.completions.create({
+            model: state.currentModel,
+            messages: [
+              { role: 'system', content: 'You are an AI assistant that enhances and improves user prompts for a coding agent. Make the prompt clearer, more professional, and more detailed, but keep it concise and direct. Output ONLY the enhanced prompt, with no additional commentary, quotes, or markdown formatting.' },
+              { role: 'user', content: origBuffer }
+            ]
+          });
+        }).then(response => {
+          if (response && response.choices && response.choices[0] && response.choices[0].message) {
+            buffer = response.choices[0].message.content.trim();
+          } else {
+            buffer = origBuffer;
+          }
+          cursorPos = buffer.length;
+          renderLineSync();
+        }).catch(err => {
+          buffer = origBuffer + "\n[Charm Error: " + err.message + "]";
+          cursorPos = buffer.length;
+          renderLineSync();
+          setTimeout(() => {
+            buffer = origBuffer;
+            cursorPos = buffer.length;
+            renderLineSync();
+          }, 3000);
+        });
+        return;
+      }
+
       // Shift+Tab or `` → cycle team mode
       if ((key && ((key.name === 'tab' && key.shift) || key.name === 'backtab')) || char === '\x1b[Z' || (char === '``' || buffer === '``')) {
         if (buffer === '``') { buffer = ''; cursorPos = 0; }
         if (state) {
-          state.teamModeIndex = ((state.teamModeIndex || 1) % 9) + 1;
+          state.teamModeIndex = ((state.teamModeIndex || 1) % 11) + 1;
           import('../history.mjs').then(m => m.saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled)).catch(() => {});
           renderLine();
         }

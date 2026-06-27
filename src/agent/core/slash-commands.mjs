@@ -240,12 +240,17 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
-        { key: 'researcher', label: 'Researcher', icon: '🔍' },
-        { key: 'system_agent', label: 'System Agent', icon: '⚙️ ' },
-        { key: 'plan', label: 'Plan', icon: '📋' },
+        { key: 'auto', label: 'Auto (Coordinator)', icon: '🤖' },
+        { key: 'planner', label: 'Planner', icon: '📋' },
         { key: 'builder', label: 'Builder', icon: '🔨' },
         { key: 'fixer', label: 'Fixer', icon: '🔧' },
-        { key: 'reviewer', label: 'Reviewer', icon: '🔍' },
+        { key: 'reviewer', label: 'Reviewer', icon: '👁️ ' },
+        { key: 'plan+build', label: 'Plan+Build', icon: '📋🔨' },
+        { key: 'plan+build+fix', label: 'Plan+Build+Fix', icon: '📋🔨🔧' },
+        { key: 'plan+build+fix+review', label: 'Plan+Build+Fix+Review', icon: '📋🔨🔧👁️' },
+        { key: 'system_agent', label: 'System Agent', icon: '⚙️ ' },
+        { key: 'researcher', label: 'Researcher', icon: '🔍' },
+        { key: 'web_agent', label: 'Web Agent', icon: '🌐' },
         { key: 'web_search', label: 'Web Search Agent', icon: '🌐' },
       ];
 

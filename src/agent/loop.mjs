@@ -156,21 +156,23 @@ export async function startChatLoop() {
     // Mode segment: 9 circles representing the team mode
     const modeIdx = state.teamModeIndex || 1;
     let circles = '';
-    for (let i = 1; i <= 9; i++) {
+    for (let i = 1; i <= 11; i++) {
       circles += (i === modeIdx) ? '●' : '○';
     }
     const modeNames = [
-      'researcher',
-      'system_agent',
-      'plan',
+      'auto',
+      'planner',
       'builder',
       'fixer',
       'reviewer',
       'plan+build',
       'plan+build+fix',
-      'plan+build+fix+review'
+      'plan+build+fix+review',
+      'system_agent',
+      'researcher',
+      'web_agent'
     ];
-    const currentModeName = modeNames[modeIdx - 1] || 'researcher';
+    const currentModeName = modeNames[modeIdx - 1] || 'auto';
     const modeColor = theme.accent ? theme.accent : chalk.cyan;
     const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
 
@@ -207,8 +209,11 @@ export async function startChatLoop() {
     const voiceIndicator = state.isVoiceOn ? `${chalk.green('●')} on` : `${theme.dim('○')} off`;
     const voiceSeg = `${theme.dim('voice:')} ${voiceIndicator} ${theme.dim('→ shift+v')}`;
 
+    // Charm segment
+    const charmSeg = `${theme.dim('charm:')} ${theme.dim('→ shift+c')}`;
+
     // Assemble segments
-    const segs = [modeSeg, modelSeg, contextSeg, permSeg, voiceSeg];
+    const segs = [modeSeg, modelSeg, contextSeg, permSeg, voiceSeg, charmSeg];
     const segTexts = segs.join(sep);
 
     // Accurately measure the visible length by stripping ANSI escape codes
@@ -521,7 +526,6 @@ export async function startChatLoop() {
       }
     }
 
-    state.selectedFilePath = null;
     let turnIsActive = true;
     let autoContinueCurrentRetries = 0;
     let turnLoopCount = 0;
@@ -534,6 +538,16 @@ export async function startChatLoop() {
     } else {
       userMsgObj.content = query;
     }
+
+    if (state.selectedFilePath) {
+      const attachMsg = `\n\n[USER ATTACHED FILE/PATH]\nThe user has explicitly selected/attached this path for you to focus on: ${state.selectedFilePath}\nPlease prioritize finding/editing things in this specific path.`;
+      if (typeof userMsgObj.content === 'string') {
+        userMsgObj.content += attachMsg;
+      } else if (Array.isArray(userMsgObj.content)) {
+        userMsgObj.content.push({ type: "text", text: attachMsg });
+      }
+    }
+    state.selectedFilePath = null;
 
     // --- AUTOMATED RAG PRE-FETCHING ---
     if (typeof query === 'string' && query.trim() !== '') {
@@ -704,8 +718,8 @@ export async function startChatLoop() {
         let eraseStickyFn;
         try {
           // Determine effective model: use role-specific model if set
-          const TEAM_MODE_NAMES = ['researcher', 'system_agent', 'plan', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review'];
-          const currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'plan';
+          const TEAM_MODE_NAMES = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
+          const currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
           const roleModel = state.modelRoles && state.modelRoles[currentTeamModeName];
           const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
           const systemModel = state.modelRoles && state.modelRoles['system_agent'];
