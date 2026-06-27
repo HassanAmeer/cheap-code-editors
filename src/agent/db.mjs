@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dataDir = path.join(__dirname, '../../data');
+const dataDir = path.join(__dirname, '../../db/chat_history_state_and_agent_memory');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -61,23 +61,9 @@ db.exec(`
 
 const StateAnnotation = {
   messages: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
-  currentModel: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'bigpickle' },
-  autoPermissionMode: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'sensitive' },
-  isAutoPromptEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => false },
-  voiceLanguage: { reducer: (x, y) => y !== undefined ? y : x, default: () => "auto" },
-  voiceProvider: { reducer: (x, y) => y !== undefined ? y : x, default: () => "offline" },
   agentPersistentMemory: { reducer: (x, y) => y !== undefined ? y : x, default: () => '' },
   sessionUndoStack: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
-  userKeys: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) },
-  isSoundEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
-  currentTheme: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'cheap' },
-  deletedSkills: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
-  autoContinueMaxRetries: { reducer: (x, y) => y !== undefined ? y : x, default: () => 3 },
-  isThinkingHidden: { reducer: (x, y) => y !== undefined ? y : x, default: () => true },
-  modelRoles: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) },
-  tokenUsageLimit: { reducer: (x, y) => y !== undefined ? y : x, default: () => 0 },
-  teamModeIndex: { reducer: (x, y) => y !== undefined ? y : x, default: () => 4 },
-  isTeamModeEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => false }
+  deletedSkills: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] }
 };
 
 const builder = new StateGraph({ channels: StateAnnotation })
@@ -87,20 +73,80 @@ const builder = new StateGraph({ channels: StateAnnotation })
 
 export const memoryApp = builder.compile({ checkpointer });
 
+const defaultSettings = {
+  currentModel: 'bigpickle',
+  autoPermissionMode: 'sensitive',
+  isAutoPromptEnabled: false,
+  voiceLanguage: 'auto',
+  voiceProvider: 'offline',
+  userKeys: {},
+  isSoundEnabled: true,
+  currentTheme: 'cheap',
+  autoContinueMaxRetries: 3,
+  isThinkingHidden: true,
+  modelRoles: {},
+  tokenUsageLimit: 0,
+  teamModeIndex: 4,
+  isTeamModeEnabled: false
+};
+
+function readSettings() {
+  const dbDir = path.join(__dirname, '../../db');
+  const settingsPath = path.join(dbDir, 'settings.json');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      return { ...defaultSettings, ...data };
+    } catch (e) {
+      return { ...defaultSettings };
+    }
+  }
+  return { ...defaultSettings };
+}
+
+function writeSettings(newSettings) {
+  const dbDir = path.join(__dirname, '../../db');
+  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  const settingsPath = path.join(dbDir, 'settings.json');
+  fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+}
+
 // Wrapper functions for global settings and memory
 export async function getGlobalState() {
   const config = { configurable: { thread_id: 'global_state' } };
   const state = await memoryApp.getState(config);
-  return state?.values || {};
+  const memoryValues = state?.values || {};
+  const settings = readSettings();
+  return { ...memoryValues, ...settings };
 }
 
 export async function updateGlobalState(updates) {
-  const config = { configurable: { thread_id: 'global_state' } };
-  const currentState = await memoryApp.getState(config);
-  if (!currentState || !currentState.values) {
-    await memoryApp.invoke(updates, config);
-  } else {
-    await memoryApp.updateState(config, updates);
+  const memoryKeys = ['messages', 'agentPersistentMemory', 'sessionUndoStack', 'deletedSkills'];
+  const memoryUpdates = {};
+  const settingUpdates = {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (memoryKeys.includes(key)) {
+      memoryUpdates[key] = value;
+    } else {
+      settingUpdates[key] = value;
+    }
+  }
+
+  if (Object.keys(memoryUpdates).length > 0) {
+    const config = { configurable: { thread_id: 'global_state' } };
+    const currentState = await memoryApp.getState(config);
+    if (!currentState || !currentState.values) {
+      await memoryApp.invoke(memoryUpdates, config);
+    } else {
+      await memoryApp.updateState(config, memoryUpdates);
+    }
+  }
+
+  if (Object.keys(settingUpdates).length > 0) {
+    const currentSettings = readSettings();
+    const newSettings = { ...currentSettings, ...settingUpdates };
+    writeSettings(newSettings);
   }
 }
 

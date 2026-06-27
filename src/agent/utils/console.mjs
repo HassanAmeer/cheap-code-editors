@@ -8,9 +8,11 @@ import fs from "fs";
 import path from "path";
 
 let debugLogStream = null;
+// Ye environment variable check is liye hai taake debug logs sirf us waqt banain 
+// jab developer khud `DEBUG=true` set kare (maslan `DEBUG=true npm start`).
 if (process.env.DEBUG === 'true') {
   try {
-    const logsDir = path.resolve(process.cwd(), 'logs');
+    const logsDir = path.resolve(process.cwd(), 'db/debug_logs');
     if (!fs.existsSync(logsDir)) {
       fs.mkdirSync(logsDir, { recursive: true });
     }

@@ -22,10 +22,15 @@ function logDebug(msg) {
   try {
     global.voiceDebugSteps = global.voiceDebugSteps || [];
     global.voiceDebugSteps.push(msg);
-    const logDir = path.join(process.cwd(), 'logs');
-    const logPath = path.join(logDir, 'voice-debug.log');
-    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\\n`);
+    
+    // Ye check ensure karta hai ke voice ke debug logs sirf tab save hon 
+    // jab `DEBUG=true` ho, taake hard drive par be-maqsad files na banain.
+    if (process.env.DEBUG === 'true') {
+      const logDir = path.join(process.cwd(), 'db/debug_logs');
+      const logPath = path.join(logDir, 'voice-debug.log');
+      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\\n`);
+    }
   } catch (e) { }
 }
 
@@ -133,8 +138,9 @@ export async function startRecording() {
       audioType: "raw",
     });
 
-    const debugAudioPath = path.join(process.cwd(), 'logs', 'debug-audio.raw');
-    if (fs.existsSync(debugAudioPath)) fs.unlinkSync(debugAudioPath);
+    const isDebugEnabled = process.env.DEBUG === 'true';
+    const debugAudioPath = path.join(process.cwd(), 'db/debug_logs', 'debug-audio.raw');
+    if (isDebugEnabled && fs.existsSync(debugAudioPath)) fs.unlinkSync(debugAudioPath);
 
     let audioBuffer = Buffer.alloc(0);
 
@@ -152,7 +158,9 @@ export async function startRecording() {
           return;
         }
         
-        fs.appendFileSync(debugAudioPath, chunkBuf);
+        if (isDebugEnabled) {
+          fs.appendFileSync(debugAudioPath, chunkBuf);
+        }
 
         audioBuffer = Buffer.concat([audioBuffer, chunkBuf]);
 

@@ -1,0 +1,25 @@
+{
+  "currentModel": "north-mini-code-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceLanguage": "urdu",
+  "voiceProvider": "offline",
+  "userKeys": {},
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "modelRoles": {
+    "researcher": "deepseek-v4-flash-free",
+    "builder": "big-pickle",
+    "plan": "deepseek-v4-flash-free",
+    "system_agent": "deepseek-v4-flash-free",
+    "fixer": "north-mini-code-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 4,
+  "isTeamModeEnabled": false
+}

@@ -1,7 +1,7 @@
 import { select, input } from '@inquirer/prompts';
 import { theme, getPromptTheme } from './theme.mjs';
-import { loadUserKeys, saveUserKeys } from '../providers/keys.mjs';
-import { clearClientCache } from '../providers/index.mjs';
+import { loadUserKeys, saveUserKeys } from '../providers_models/keys.mjs';
+import { clearClientCache } from '../providers_models/index.mjs';
 import { purgeMemory } from '../agent/db.mjs';
 import chalk from 'chalk';
 

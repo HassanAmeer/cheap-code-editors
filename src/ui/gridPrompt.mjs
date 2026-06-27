@@ -1,5 +1,6 @@
 import readline from 'readline';
 import { theme } from './theme.mjs';
+import chalk from 'chalk';
 
 export async function gridPrompt(groups, currentModel) {
   return new Promise((resolve) => {
@@ -96,8 +97,8 @@ export async function gridPrompt(groups, currentModel) {
         scrollOffset = Math.max(0, gridRows.length - maxVisibleRows);
       }
 
-      let output = `${theme.info('⬢ Select an AI Model (Use Arrow Keys, Enter to confirm, Esc to cancel):')}\n\n`;
-      let lines = 2; // initial heading + newline
+      let output = `${theme.info('⬢ Select an AI Model (Use Arrow Keys, Enter to confirm, Esc to cancel):')}\n  ${chalk.yellow.bold('💡 Note: Add provider API key inside providers to show other models')}\n\n`;
+      let lines = 3; // initial heading + tip + newline
 
       if (scrollOffset > 0) {
         output += `  ${theme.dim('▲  (More models above...)')}\n`;

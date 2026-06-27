@@ -23,7 +23,7 @@ marked.setOptions({
   })
 });
 import { printLogo, } from '../ui/logo.mjs';
-import { getClientForModel, getModelsGroupedByProvider, getValidAutoModels } from '../providers/index.mjs';
+import { getClientForModel, getModelsGroupedByProvider, getValidAutoModels } from '../providers_models/index.mjs';
 import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting, getTeamModeSettings, getAutoModeSetting } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';

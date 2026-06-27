@@ -18,7 +18,7 @@ import { playNotification } from '../../ui/sound.mjs';
 import { raceAbort, spawnAndCollect, checkAndInstallMissingDependencies } from '../utils/process.mjs';
 import { confirmWebAgentStart } from '../utils/permissions.mjs';
 import { buildSystemPrompt } from './system-prompt.mjs';
-import { getClientForModel } from '../../providers/index.mjs';
+import { getClientForModel } from '../../providers_models/index.mjs';
 import { addMemoryRecord, searchMemory } from '../db.mjs';
 
 function isActionSensitive(toolName, args) {

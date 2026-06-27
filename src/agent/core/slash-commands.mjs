@@ -16,7 +16,7 @@ import { PROJECTS_DIR, getWorkspaceTree } from '../../tools/file-system.mjs';
 import { detectAndGenerateAutoSkills } from '../../tools/skills.mjs';
 import { buildSystemPrompt } from './system-prompt.mjs';
 import { getSoundEnabled, setSoundEnabled, playNotification } from '../../ui/sound.mjs';
-import { getClientForModel, getModelsGroupedByProvider } from '../../providers/index.mjs';
+import { getClientForModel, getModelsGroupedByProvider } from '../../providers_models/index.mjs';
 import { saveAutoPermissionSetting, saveAutoPromptSetting, saveLastModel, deleteAllChats, saveChatHistory, getAvailableChats, deleteChat, loadChatHistory } from '../history.mjs';
 import { printLogo } from '../../ui/logo.mjs';
 import { getAllChatThreads, getChatState, updateChatState } from '../db.mjs';

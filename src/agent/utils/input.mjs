@@ -426,7 +426,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         buffer = origBuffer + "\n[✨ Charming your prompt...]";
         renderLineSync();
 
-        import('../../providers/index.mjs').then(({ getClientForModel }) => {
+        import('../../providers_models/index.mjs').then(({ getClientForModel }) => {
           const aiClient = getClientForModel(state.currentModel);
           return aiClient.chat.completions.create({
             model: state.currentModel,
@@ -486,7 +486,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
       // Ctrl+P → cycle active models
       if (key && key.ctrl && key.name === 'p') {
         if (state) {
-          import('../../providers/index.mjs').then(({ getModelsGroupedByProvider }) => {
+          import('../../providers_models/index.mjs').then(({ getModelsGroupedByProvider }) => {
             const allChoices = getModelsGroupedByProvider().flatMap(g => g.choices).filter(c => c && c.value);
             if (allChoices.length > 0) {
               let idx = allChoices.findIndex(c => c.value === state.currentModel);

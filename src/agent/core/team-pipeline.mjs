@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { theme } from '../../ui/theme.mjs';
-import { getClientForModel } from '../../providers/index.mjs';
+import { getClientForModel } from '../../providers_models/index.mjs';
 import { executeTool } from './tool-executor.mjs';
 import { aiToolsConfig } from './ai-tools.mjs';
 import { buildSystemPrompt } from './system-prompt.mjs';

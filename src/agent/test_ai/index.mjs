@@ -1,4 +1,4 @@
-import { getClientForModel } from "../../providers/index.mjs";
+import { getClientForModel } from "../../providers_models/index.mjs";
 import { theme } from "../../ui/theme.mjs";
 import ora from "ora";
 

@@ -5,7 +5,7 @@ import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const KEYS_FILE = path.join(__dirname, '../../chats-history/keys.json');
+const KEYS_FILE = path.join(__dirname, '../../db/keys.json');
 
 // Load package-level .env if it exists and variables are not already set
 const envPath = path.resolve(__dirname, '../../.env');
