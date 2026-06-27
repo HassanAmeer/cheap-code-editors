@@ -6,48 +6,48 @@
   "voiceProvider": "offline",
   "userKeys": {
     "opencode": {
-      "apiKey": "",
-      "baseURL": ""
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
     },
     "nvidia": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://integrate.api.nvidia.com/v1"
     },
     "gemini": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
     },
     "openrouter": {
-      "apiKey": "",
-      "baseURL": ""
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
     },
     "openai": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://api.openai.com/v1"
     },
     "poolside": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://api.poolside.ai/v1"
     },
     "vercel": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://ai-gateway.vercel.sh"
     },
     "qwen": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     },
     "zai": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
     },
     "kimi": {
       "apiKey": "",
-      "baseURL": ""
+      "baseURL": "https://api.moonshot.cn/v1"
     },
     "zenmux": {
-      "apiKey": "",
-      "baseURL": ""
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
     }
   },
   "isSoundEnabled": true,

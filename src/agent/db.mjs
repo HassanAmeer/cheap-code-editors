@@ -81,17 +81,17 @@ const defaultSettings = {
 
   voiceProvider: 'offline',
   userKeys: {
-    opencode: { apiKey: "", baseURL: "" },
-    nvidia: { apiKey: "", baseURL: "" },
-    gemini: { apiKey: "", baseURL: "" },
-    openrouter: { apiKey: "", baseURL: "" },
-    openai: { apiKey: "", baseURL: "" },
-    poolside: { apiKey: "", baseURL: "" },
-    vercel: { apiKey: "", baseURL: "" },
-    qwen: { apiKey: "", baseURL: "" },
-    zai: { apiKey: "", baseURL: "" },
-    kimi: { apiKey: "", baseURL: "" },
-    zenmux: { apiKey: "", baseURL: "" }
+    opencode: { apiKey: "", baseURL: "https://opencode.ai/zen/v1" },
+    nvidia: { apiKey: "", baseURL: "https://integrate.api.nvidia.com/v1" },
+    gemini: { apiKey: "", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" },
+    openrouter: { apiKey: "", baseURL: "https://openrouter.ai/api/v1" },
+    openai: { apiKey: "", baseURL: "https://api.openai.com/v1" },
+    poolside: { apiKey: "", baseURL: "https://api.poolside.ai/v1" },
+    vercel: { apiKey: "", baseURL: "https://ai-gateway.vercel.sh" },
+    qwen: { apiKey: "", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+    zai: { apiKey: "", baseURL: "https://open.bigmodel.cn/api/paas/v4/" },
+    kimi: { apiKey: "", baseURL: "https://api.moonshot.cn/v1" },
+    zenmux: { apiKey: "", baseURL: "https://zenmux.ai/api/v1" }
   },
   isSoundEnabled: true,
   currentTheme: 'cheap',

@@ -226,10 +226,10 @@ export async function executeSlashCommand(cmdInput, ctx) {
   if (typeof query === 'string' || typeof query === 'object') {
     if (lowerCmd === '/model') {
       const groups = getModelsGroupedByProvider();
-      
+
       const modeNames = [
-        'auto', 'planner', 'builder', 'fixer', 'reviewer', 
-        'plan+build', 'plan+build+fix', 'plan+build+fix+review', 
+        'auto', 'planner', 'builder', 'fixer', 'reviewer',
+        'plan+build', 'plan+build+fix', 'plan+build+fix+review',
         'system_agent', 'researcher', 'web_agent'
       ];
 
@@ -1250,13 +1250,37 @@ Extensions
   if (lowerCmd === '/export') {
     let spinner = null;
     try {
-      spinner = ora({ text: theme.dim('Exporting all chats...'), color: false }).start();
-      const threadIds = await getAllChatThreads();
-      const exportData = [];
-      for (const id of threadIds) {
-        const msgs = await loadChatHistory(id);
-        if (msgs && msgs.length > 0) {
-          exportData.push({ id, messages: msgs });
+      const exportChoice = await select({
+        message: 'What would you like to export?',
+        choices: [
+          { name: 'Export Current Session', value: 'current' },
+          { name: 'Export All Sessions', value: 'all' }
+        ]
+      });
+
+      spinner = ora({ text: theme.dim(`Exporting ${exportChoice === 'all' ? 'all chats' : 'current chat'}...`), color: false }).start();
+
+      let exportData = [];
+
+      if (exportChoice === 'current') {
+        if (!state.messages || state.messages.length === 0) {
+          if (spinner) spinner.stop();
+          console.log(theme.error("\n❌ No messages in the current session to export.\n"));
+          return { action: 'continue' };
+        }
+        exportData = [{ id: state.chatId, messages: state.messages }];
+      } else {
+        const threadIds = await getAllChatThreads();
+        for (const id of threadIds) {
+          const msgs = await loadChatHistory(id);
+          if (msgs && msgs.length > 0) {
+            exportData.push({ id, messages: msgs });
+          }
+        }
+        if (exportData.length === 0) {
+          if (spinner) spinner.stop();
+          console.log(theme.error("\n❌ No chat sessions found to export.\n"));
+          return { action: 'continue' };
         }
       }
 
@@ -1309,17 +1333,19 @@ Extensions
 
       if (inputPath && inputPath.trim()) {
         const fileData = await fs.readFile(inputPath.trim(), 'utf-8');
-        const parsedData = JSON.parse(fileData);
-        if (Array.isArray(parsedData)) {
-          for (const chat of parsedData) {
-            if (chat.id && chat.messages) {
-              await updateChatState(chat.id, { messages: chat.messages });
-            }
-          }
-          console.log(theme.success(`\n✔ Imported ${parsedData.length} chats successfully!\n`));
-        } else {
-          console.log(theme.error(`\n❌ Invalid export file format.\n`));
+        let parsedData = JSON.parse(fileData);
+        if (!Array.isArray(parsedData)) {
+          parsedData = [parsedData];
         }
+
+        let importedCount = 0;
+        for (const chat of parsedData) {
+          if (chat.id && chat.messages) {
+            await updateChatState(chat.id, { messages: chat.messages });
+            importedCount++;
+          }
+        }
+        console.log(theme.success(`\n✔ Imported ${importedCount} chat session(s) successfully!\n`));
       } else {
         console.log(theme.dim("Import cancelled.\n"));
       }
