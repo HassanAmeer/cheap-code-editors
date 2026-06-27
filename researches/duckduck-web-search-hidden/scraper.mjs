@@ -1,6 +1,9 @@
+// HIDDEN WEB SEARCH: This file uses Playwright with puppeteer-extra-plugin-stealth
+// to scrape DuckDuckGo search results without requiring an API key.
+
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import { theme } from "../../ui/theme.mjs";
+import { theme } from "../../src/ui/theme.mjs";
 
 chromium.use(StealthPlugin());
 

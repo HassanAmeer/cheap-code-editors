@@ -1,5 +1,8 @@
-import { duckduckSearchFallback } from "../duckduck-web-search/scraper.mjs";
-import { theme } from "../../ui/theme.mjs";
+// HIDDEN WEB SEARCH: This file acts as a fallback to perform web searches
+// by routing queries through the internal DuckDuckGo scraper method.
+
+import { duckduckSearchFallback } from "../duckduck-web-search-hidden/scraper.mjs";
+import { theme } from "../../src/ui/theme.mjs";
 
 export async function searchWebWithFreeSearchAPI(searchQuery) {
   try {

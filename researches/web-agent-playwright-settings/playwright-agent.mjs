@@ -1,8 +1,11 @@
+// HIDDEN WEB SEARCH / AGENT: This file uses the Playwright library to 
+// autonomously browse websites, click elements, and extract information.
+
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { theme } from '../ui/theme.mjs';
+import { theme } from '../../src/ui/theme.mjs';
 
 // Browser automation agent (playwright) – cleaned up
 // Removed unnecessary imports and added better logging.

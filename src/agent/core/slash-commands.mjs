@@ -22,7 +22,8 @@ import { printLogo } from '../../ui/logo.mjs';
 import { getAllChatThreads, getChatState, updateChatState } from '../db.mjs';
 import { gridPrompt } from '../../ui/gridPrompt.mjs';
 import { undoAction } from '../../tools/editor.mjs';
-import { webAgent } from '../../playwright-web-agent-settings/index.mjs';
+import { displayAgentsList } from '../../ui/agentsList.mjs';
+import { webAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
 
 async function chooseDirectoryInteractive(currentPath) {
   let activePath = path.resolve(currentPath);

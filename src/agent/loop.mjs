@@ -371,7 +371,7 @@ export async function startChatLoop() {
     }
 
     if (state.activeAgentMode === 'web_hidden') {
-      const { searchWebWithFreeSearchAPI } = await import('../searches/whole-web-search/api.mjs');
+      const { searchWebWithFreeSearchAPI } = await import('../../researches/playwright-whole-web-search-hidden/api.mjs');
 
       const browseAbort = new AbortController();
       currentAbortController = browseAbort;
@@ -443,7 +443,7 @@ export async function startChatLoop() {
         process.stdout.write('\x1b[?25h');
       }
     } else if (state.activeAgentMode === 'web_browse') {
-      const { runAutoWebAgent } = await import('../playwright-web-agent-settings/playwright-agent.mjs');
+      const { runAutoWebAgent } = await import('../../researches/web-agent-playwright-settings/playwright-agent.mjs');
       const { confirmWebAgentStart } = await import('./utils/permissions.mjs');
 
       const agentPrefs = await confirmWebAgentStart();
@@ -1105,7 +1105,7 @@ export async function startChatLoop() {
   }
 
   try {
-    const { webAgent } = await import('../playwright-web-agent-settings/index.mjs');
+    const { webAgent } = await import('../../researches/web-agent-playwright-settings/index.mjs');
     await webAgent.close();
   } catch (e) { }
 

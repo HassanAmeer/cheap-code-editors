@@ -8,8 +8,9 @@ import path from 'path';
 import fs from 'fs/promises';
 import { confirm } from '@inquirer/prompts';
 import ora from 'ora';
-import { theme, getPromptTheme } from '../../ui/theme.mjs';
-import { webAgent } from '../../playwright-web-agent-settings/index.mjs';
+import { theme } from '../../ui/theme.mjs';
+import { webAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
+import { db } from '../db.mjs';
 
 export const execAsync = promisify(exec);
 
