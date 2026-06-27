@@ -302,6 +302,20 @@ export async function redrawFullApp(state) {
       if (msg.content) {
         console.log('\n' + renderWithLeftBorder(msg.content));
       }
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        for (const tc of msg.tool_calls) {
+          const fnName = tc.function?.name || 'unknown';
+          let fnArgs = tc.function?.arguments || '{}';
+          if (typeof fnArgs === 'string' && fnArgs.length > 60) fnArgs = fnArgs.substring(0, 60) + '...';
+          console.log(theme.accent('\n  ○ ') + theme.dim(`Used tool: ${fnName}(${fnArgs})`));
+        }
+      }
+    } else if (msg.role === 'tool') {
+      const toolName = msg.name || 'tool';
+      let resContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      if (resContent.length > 60) resContent = resContent.substring(0, 60) + '...';
+      resContent = resContent.replace(/\n/g, ' ');
+      console.log(theme.success('  ✔ ') + theme.dim(`${toolName} returned: ${resContent}`));
     }
   }
 }

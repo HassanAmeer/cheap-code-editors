@@ -2,6 +2,7 @@
   "currentModel": "deepseek-v4-flash-free",
   "autoPermissionMode": "sensitive",
   "isAutoPromptEnabled": false,
+  "voiceLanguage": "auto",
   "voiceProvider": "offline",
   "userKeys": {
     "opencode": {
@@ -57,7 +58,7 @@
     "auto": "",
     "planner": "",
     "builder": "big-pickle",
-    "fixer": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
     "reviewer": "deepseek-v4-flash-free",
     "plan+build": "",
     "plan+build+fix": "",
