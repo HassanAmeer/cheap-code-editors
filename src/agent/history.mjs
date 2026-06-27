@@ -85,20 +85,26 @@ export async function getAvailableChats() {
     } catch (err) { return []; }
 }
 
-export async function deleteAllChats() {
-    writeDebugLog("History: Delete All Chats", {});
-    try {
-        await deleteAllChatThreads();
-        return true;
-    } catch (err) { return false; }
+export async function deleteChat(chatId) {
+  try {
+    const { db } = await import('./db.mjs');
+    await deleteChatThread(chatId);
+    db.prepare(`DELETE FROM manager_memory WHERE thread_id = ?`).run(chatId);
+    return true;
+  } catch (err) {
+    writeDebugLog("History: Failed to delete chat", err, "ERROR");
+    return false;
+  }
 }
 
-export async function deleteChat(chatId) {
-    writeDebugLog("History: Delete Chat", { chatId });
-    try {
-        await deleteChatThread(chatId);
-        return true;
-    } catch (err) { return false; }
+export async function deleteAllChats() {
+  try {
+    const { db } = await import('./db.mjs');
+    db.prepare(`DELETE FROM checkpoints WHERE thread_id != 'global_state'`).run();
+    db.prepare(`DELETE FROM writes WHERE thread_id != 'global_state'`).run();
+    db.prepare(`DELETE FROM manager_memory WHERE thread_id != 'global_state'`).run();
+    return true;
+  } catch (err) { return false; }
 }
 
 export async function saveLastModel(model) {
@@ -180,6 +186,20 @@ export async function getThinkingHiddenSetting() {
         const state = readSettings();
         return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : true;
     } catch (err) { return true; }
+}
+
+export async function saveManagerAgentSetting(enabled) {
+    try {
+        updateSettings({ isManagerAgentEnabled: enabled });
+        return true;
+    } catch (err) { return false; }
+}
+
+export async function getManagerAgentSetting() {
+    try {
+        const state = readSettings();
+        return state.isManagerAgentEnabled !== undefined && state.isManagerAgentEnabled !== null ? state.isManagerAgentEnabled : false;
+    } catch (err) { return false; }
 }
 
 export async function saveModelRoles(roles) {

@@ -426,15 +426,23 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         buffer = origBuffer + "\n[✨ Charming your prompt...]";
         renderLineSync();
 
-        import('../../providers_models/index.mjs').then(({ getClientForModel }) => {
+        import('../../providers_models/index.mjs').then(async ({ getClientForModel }) => {
           const aiClient = getClientForModel(state.currentModel);
-          return aiClient.chat.completions.create({
-            model: state.currentModel,
-            messages: [
-              { role: 'system', content: 'You are an AI assistant that enhances and improves user prompts for a coding agent. Make the prompt clearer, more professional, and more detailed, but keep it concise and direct. Output ONLY the enhanced prompt, with no additional commentary, quotes, or markdown formatting.' },
-              { role: 'user', content: origBuffer }
-            ]
-          });
+          const TEAM_MODE_NAMES = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
+          const activeRole = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
+
+          if (state.isManagerAgentEnabled) {
+            const { runManagerCharm } = await import('../core/manager_agent.mjs');
+            return { choices: [{ message: { content: await runManagerCharm(origBuffer, state, aiClient, activeRole) } }] };
+          } else {
+            return aiClient.chat.completions.create({
+              model: state.currentModel,
+              messages: [
+                { role: 'system', content: 'You are an AI assistant that enhances and improves user prompts for a coding agent. Make the prompt clearer, more professional, and more detailed, but keep it concise and direct. Output ONLY the enhanced prompt, with no additional commentary, quotes, or markdown formatting.' },
+                { role: 'user', content: origBuffer }
+              ]
+            });
+          }
         }).then(response => {
           if (response && response.choices && response.choices[0] && response.choices[0].message) {
             buffer = response.choices[0].message.content.trim();

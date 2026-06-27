@@ -53,10 +53,14 @@ const checkpointer = new SqliteSaver(db);
 await checkpointer.setup(); // Creates tables if they don't exist
 
 // Initialize FTS5 Memory Table
-db.exec(`
+dbInstance.exec(`
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
     content,
     timestamp UNINDEXED
+  );
+  CREATE TABLE IF NOT EXISTS manager_memory (
+    thread_id TEXT PRIMARY KEY,
+    memory_data TEXT
   );
 `);
 
@@ -97,6 +101,7 @@ const defaultSettings = {
   currentTheme: 'cheap',
   autoContinueMaxRetries: 3,
   isThinkingHidden: false,
+  isManagerAgentEnabled: false,
   modelRoles: {
     "auto": "",
     "planner": "",
@@ -196,26 +201,56 @@ export async function updateGlobalState(updates) {
 
 // Wrapper functions for specific chats
 export async function getChatState(chatId) {
-  const config = { configurable: { thread_id: chatId } };
-  const state = await memoryApp.getState(config);
-  return state?.values || null;
+  try {
+    const state = await memoryApp.getState({ configurable: { thread_id: chatId } });
+    return state.values || {};
+  } catch (e) {
+    return {};
+  }
 }
 
-export async function updateChatState(chatId, updates) {
-  writeDebugLog("DB: Updating Chat State", { chatId, updates });
-  const config = { configurable: { thread_id: chatId } };
-  const currentState = await memoryApp.getState(config);
-  if (!currentState || !currentState.values) {
-    await memoryApp.invoke(updates, config);
-  } else {
-    await memoryApp.updateState(config, updates);
+export async function updateChatState(chatId, values) {
+  try {
+    await memoryApp.updateState({ configurable: { thread_id: chatId } }, values);
+  } catch (e) {
+    writeDebugLog("DB: Update Chat State Error", e, "ERROR");
   }
 }
 
 export async function getAllChatThreads() {
-  const stmt = db.prepare(`SELECT DISTINCT thread_id FROM checkpoints WHERE thread_id != 'global_state'`);
+  const stmt = dbInstance.prepare(`SELECT DISTINCT thread_id FROM checkpoints WHERE thread_id != 'global_state'`);
   const rows = stmt.all();
   return rows.map(row => row.thread_id);
+}
+
+// ==========================================
+// Manager Memory (Orchestrator Internal State)
+// ==========================================
+
+export async function getManagerMemory(threadId) {
+  try {
+    const stmt = dbInstance.prepare(`SELECT memory_data FROM manager_memory WHERE thread_id = ?`);
+    const row = stmt.get(threadId);
+    if (row && row.memory_data) {
+      return JSON.parse(row.memory_data);
+    }
+  } catch (e) {
+    writeDebugLog("DB: Get Manager Memory Error", e, "ERROR");
+  }
+  return [];
+}
+
+export async function saveManagerMemory(threadId, memoryDataArray) {
+  try {
+    const stmt = dbInstance.prepare(`
+      INSERT INTO manager_memory (thread_id, memory_data)
+      VALUES (?, ?)
+      ON CONFLICT(thread_id) DO UPDATE SET memory_data = excluded.memory_data
+    `);
+    stmt.run(threadId, JSON.stringify(memoryDataArray));
+  } catch (e) {
+    writeDebugLog("DB: Save Manager Memory Error", e, "ERROR");
+  }
 }
 
 export async function deleteChatThread(chatId) {

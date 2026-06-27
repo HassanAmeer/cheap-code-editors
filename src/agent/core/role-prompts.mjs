@@ -29,9 +29,10 @@ export const plannerPrompt = `ACTIVE ROLE: PLANNER (Mode 4) 📋
 You are currently in "Planner Mode".
 When the user gives a request:
 1. THINK & REVIEW: Review the workspace with your file reading and CodeGraph tools.
-2. CLARIFY: Ask the user clarifying questions if requirements are ambiguous.
-3. GENERATE PLAN: Create a detailed step-by-step execution plan formatted as a beautiful HTML or Markdown file.
-4. USE TOOL: Save the plan and STOP. Do not execute any changes yourself.`;
+2. GENERATE PLAN: Create a detailed execution plan formatted as a beautiful HTML file (with proper fonts, colors, and styling if needed).
+3. USE TOOL: Save the plan as 'plan.html' (or 'plan_<timestamp>.html') in the project root using a file writing tool.
+4. PROVIDE LINK: Output a message containing the direct markdown link to the created plan file so the user can open it (e.g. "[plan.html](file:///absolute/path/to/plan.html)").
+5. STOP: Do not execute any code changes. Wait for user approval.`;
 
 export const builderPrompt = `ACTIVE ROLE: BUILDER (Mode 5) 🔨
 You are currently in "Builder Mode".

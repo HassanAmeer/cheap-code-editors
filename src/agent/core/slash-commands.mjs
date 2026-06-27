@@ -139,6 +139,10 @@ export async function executeSlashCommand(cmdInput, ctx) {
         ? '👁 hide_thinking  - Hide AI Thinking Blocks: ON'
         : '👁 hide_thinking  - Hide AI Thinking Blocks: OFF';
 
+      const managerAgentChoiceName = state.isManagerAgentEnabled
+        ? '🤖 manager_agent  - Manager Agent (Auto Orchestrator): ON'
+        : '🤖 manager_agent  - Manager Agent (Auto Orchestrator): OFF';
+
       const rawChoices = [
         { name: '⊘ clear         - Clear terminal and preserve memory', value: '/clear' },
         { name: '⎇ new           - Clear terminal + start new session', value: '/new' },
@@ -154,6 +158,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '✦ models        - Change AI Model', value: '/model' },
         { name: '⊕ model_roles   - Assign Models per Role (plan/builder/fixer...)', value: '/model_roles' },
         { name: autoModelChoiceName, value: '/auto' },
+        { name: managerAgentChoiceName, value: '/manager_agent' },
         { name: '⬢ web agent     - Web Agent Task', value: '/web-agent' },
         { name: '🎤 voice_to_text - Set Voice Provider', value: '/voice_to_text' },
         { name: '↶ undo          - Undo the last edits', value: '/undo' },
@@ -641,6 +646,10 @@ Instructions for you (The Architect):
       state.lastAiEditedFiles = [];
       state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
       state.chatId = 'chat_' + Date.now();
+      
+      const { exec } = await import('child_process');
+      exec('npx codegraph sync', { cwd: PROJECTS_DIR }, (err) => { /* Background sync */ });
+      
       console.log(theme.success("✔ Terminal cleared and fresh session started! (Persistent Memory Retained)\n"));
       return { action: 'continue' };
     }
@@ -821,6 +830,17 @@ Instructions for you (The Architect):
       console.log(theme.success(`✔ Hide AI Thinking Blocks: ON 🙈\n`) + theme.dim(`  <thinking>...</thinking> blocks will be stripped from responses.\n`));
     } else {
       console.log(theme.success(`✔ Hide AI Thinking Blocks: OFF 👁\n`) + theme.dim(`  <thinking>...</thinking> blocks will be shown dimmed in responses.\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/manager_agent') {
+    state.isManagerAgentEnabled = !state.isManagerAgentEnabled;
+    const { saveManagerAgentSetting } = await import('../history.mjs');
+    await saveManagerAgentSetting(state.isManagerAgentEnabled);
+    if (state.isManagerAgentEnabled) {
+      console.log(theme.success(`✔ Manager Agent: ON 🤖\n`) + theme.dim(`  The Manager Orchestrator will now analyze all tasks and delegate them appropriately.\n`));
+    } else {
+      console.log(theme.success(`✔ Manager Agent: OFF 🤖\n`) + theme.dim(`  Tasks will directly execute on the active role without Manager interference.\n`));
     }
     return { action: 'continue' };
   }
