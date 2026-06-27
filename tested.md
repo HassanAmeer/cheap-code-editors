@@ -5,7 +5,9 @@
 - ⟲ auto retries  - Auto Continue Max Retries: 3
 - ⛨ permission    - Auto Permission: SENSITIVE
 - 🎤 voice to text
-- 
+- auto model switching
+-
+-
 
 
 

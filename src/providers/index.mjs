@@ -25,6 +25,25 @@ export function clearClientCache() {
   }
 }
 
+// Check if a model's provider has a valid configured API key
+export function getValidAutoModels() {
+  const providerKeyMap = {
+    'OpenCode': true, // Always available
+    'NVIDIA NIM': providerKeys.nvidia.apiKey && providerKeys.nvidia.apiKey !== "nvapi-PLACEHOLDER_KEY",
+    'Gemini': !!providerKeys.gemini.apiKey,
+    'OpenAI': !!providerKeys.openai.apiKey,
+    'OpenRouter': !!providerKeys.openrouter.apiKey,
+    'Poolside': !!providerKeys.poolside.apiKey,
+    'Vercel': !!providerKeys.vercel.apiKey,
+    'Qwen': !!providerKeys.qwen.apiKey,
+    'Zai': !!providerKeys.zai.apiKey,
+    'Kimi': !!providerKeys.kimi.apiKey,
+    'Zenmux': !!providerKeys.zenmux.apiKey,
+  };
+
+  return allModels.filter(model => model.show === true && providerKeyMap[model.provider]);
+}
+
 // Generate formatted choices for Inquirer (Legacy list)
 export function getModelChoices() {
   const showProvider = process.env.SHOW_PROVIDER_NAMES !== 'false';

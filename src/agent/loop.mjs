@@ -23,8 +23,8 @@ marked.setOptions({
   })
 });
 import { printLogo, } from '../ui/logo.mjs';
-import { getClientForModel, getModelsGroupedByProvider } from '../providers/index.mjs';
-import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting, getTeamModeSettings } from './history.mjs';
+import { getClientForModel, getModelsGroupedByProvider, getValidAutoModels } from '../providers/index.mjs';
+import { saveChatHistory, getAvailableChats, deleteAllChats, deleteChat, loadChatHistory, saveLastModel, getLastModel, saveAutoPermissionSetting, getAutoPermissionSetting, saveAutoPromptSetting, getAutoPromptSetting, getAutoContinueMaxTimeSetting, getThinkingHiddenSetting, getModelRoles, getTokenUsageLimitSetting, getTeamModeSettings, getAutoModeSetting } from './history.mjs';
 import { setupConsoleMonkeyPatches, TerminalState, countPhysicalLineFeeds, stripAnsiLocal, setConsoleSpinnerHooks, renderWithLeftBorder } from './utils/console.mjs';
 import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
@@ -51,7 +51,7 @@ export async function startChatLoop() {
     messages: [],
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
-    isAutoModeEnabled: true,
+    isAutoModeEnabled: await getAutoModeSetting(),
     currentModel: await getLastModel(),
     lastAiEditedFiles: [],
     sessionUndoStack: [],
@@ -174,15 +174,16 @@ export async function startChatLoop() {
     const modeColor = theme.accent ? theme.accent : chalk.cyan;
     const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
 
+    // Model segment: (model in accent)
+    const roleModel = state.modelRoles && state.modelRoles[currentModeName];
+    const modelName = roleModel || state.currentModel || 'unknown';
+    const modelSeg = `${theme.accent(modelName)}`;
+
     // Permission mode segment
     const permMode = state.autoPermissionMode || 'sensitive';
     const permColor = permMode === 'full' ? theme.error : (permMode === 'ask' ? theme.success : theme.warning);
     const permModeStyled = permColor ? permColor(permMode) : permMode;
     const permSeg = `${theme.dim('permissions:')} ${permModeStyled}`;
-
-    // Model segment: "model_name → ctrl+p" (model in accent)
-    const modelName = state.currentModel || 'unknown';
-    const modelSeg = `${theme.accent(modelName)} ${theme.dim('→ ctrl+p')}`;
 
     // Context bar (exact cheap format: ████████████████ 0% ctx)
     const BAR_WIDTH = 16;
@@ -202,8 +203,12 @@ export async function startChatLoop() {
     // Separator: " · " (dim dot)
     const sep = ` ${theme.dim('·')} `;
 
+    // Voice segment
+    const voiceIndicator = state.isVoiceOn ? `${chalk.green('●')} on` : `${theme.dim('○')} off`;
+    const voiceSeg = `${theme.dim('voice:')} ${voiceIndicator} ${theme.dim('→ shift+v')}`;
+
     // Assemble segments
-    const segs = [modeSeg, permSeg, modelSeg, contextSeg];
+    const segs = [modeSeg, modelSeg, contextSeg, permSeg, voiceSeg];
     const segTexts = segs.join(sep);
 
     // Accurately measure the visible length by stripping ANSI escape codes
@@ -338,6 +343,7 @@ export async function startChatLoop() {
     if (slashResult.action === 'redraw') {
       const { redrawFullApp } = await import('./utils/console.mjs');
       await redrawFullApp(state);
+      if (slashResult.message) console.log(slashResult.message);
       continue;
     }
     if (slashResult.action === 'done') {
@@ -1021,7 +1027,25 @@ export async function startChatLoop() {
             turnIsActive = false;
           } else {
             safeLogMsg(theme.error(`\n❌ AI Error: ${apiErr.message}\n`));
-            if (state.isAutoContinueEnabled) {
+            if (state.isAutoModeEnabled) {
+              const validModels = getValidAutoModels();
+              if (validModels.length > 1) {
+                const currentIndex = validModels.findIndex(m => m.value === state.currentModel);
+                const nextIndex = (currentIndex + 1) % validModels.length;
+                const nextModel = validModels[nextIndex];
+
+                safeLogMsg(theme.warning(`🔄 Auto Model Switching is ON. Switching from ${state.currentModel} to ${nextModel.value}...`));
+                state.currentModel = nextModel.value;
+                import('../agent/history.mjs').then(m => m.saveLastModel(state.currentModel)).catch(() => { });
+
+                // Keep turn active to retry immediately
+                continue;
+              } else {
+                safeLogMsg(theme.warning(`⚠️ Auto Model Switching is ON, but no other models with valid API keys were found.`));
+                turnIsActive = false;
+                state.messages = state.messages.slice(0, prevMessagesLength);
+              }
+            } else if (state.isAutoContinueEnabled) {
               safeLogMsg(theme.info("🔄 Auto Continue on Stuck is ON. Feeding error back to AI..."));
               state.messages.push({ role: "system", content: `API Error occurred: ${apiErr.message}. Please fix the issue and try again.` });
             } else if (state.autoContinueMaxRetries > 0 && autoContinueCurrentRetries < state.autoContinueMaxRetries) {

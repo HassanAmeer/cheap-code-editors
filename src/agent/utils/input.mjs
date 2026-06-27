@@ -218,6 +218,10 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         }
       }
 
+            if (state && state.isVoiceOn) {
+        displayStr = chalk.green("Listening... 🎤") + "\n" + displayStr;
+        cursorStr = "\n" + cursorStr;
+      }
       let fullStrToWrite = displayStr;
       const currentBottomBar = typeof bottomBarTextOrFn === 'function' ? bottomBarTextOrFn() : bottomBarText;
 
@@ -367,12 +371,39 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
 
       // ESC → exit
       if (key && key.name === 'escape') {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(()=>{});
+        }
         renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
       }
 
       // Ctrl+C → exit
       if (key && key.ctrl && key.name === 'c') {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(()=>{});
+        }
         renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
+      }
+
+      // Shift+V → toggle voice
+      if (key && key.name === 'v' && key.shift) {
+        if (!state) return;
+        if (!state.isVoiceOn) {
+          state.isVoiceOn = 'starting';
+          import('./voice.mjs').then(m => m.startRecording()).then(() => {
+            if (state.isVoiceOn === 'starting') {
+              state.isVoiceOn = true;
+              renderLine();
+            }
+          }).catch(console.error);
+        } else {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(console.error);
+        }
+        renderLine();
+        return;
       }
 
       // Shift+Tab or `` → cycle team mode
@@ -439,6 +470,30 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
 
       // Enter → submit
       if (key && (key.name === 'return' || key.name === 'enter')) {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          const origBuffer = buffer;
+          buffer = origBuffer + (origBuffer.length > 0 ? " " : "") + "[⏳ Transcribing...]";
+          renderLineSync();
+          import('./voice.mjs').then(m => {
+            return m.stopRecording().then(() => m.transcribeRecording());
+          }).then(text => {
+            buffer = origBuffer;
+            if (text) {
+              buffer += (buffer.length > 0 ? " " : "") + text;
+              cursorPos = buffer.length;
+            } else {
+              cursorPos = buffer.length;
+            }
+            renderLine();
+          }).catch(err => {
+            buffer = origBuffer;
+            buffer += (buffer.length > 0 ? " " : "") + "[Voice Error: " + err.message + "]";
+            cursorPos = buffer.length;
+            renderLine();
+          });
+          return;
+        }
         if (key.shift || key.meta || timeSinceLastKey < 10) {
           buffer = buffer.slice(0, cursorPos) + '\n' + buffer.slice(cursorPos);
           cursorPos++;

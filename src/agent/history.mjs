@@ -137,6 +137,19 @@ export async function getAutoPromptSetting() {
     } catch (err) { return false; }
 }
 
+export async function saveAutoModeSetting(enabled) {
+    try {
+        await updateGlobalState({ isAutoModeEnabled: enabled });
+    } catch (err) { }
+}
+
+export async function getAutoModeSetting() {
+    try {
+        const state = await getGlobalState();
+        return state.isAutoModeEnabled !== undefined && state.isAutoModeEnabled !== null ? state.isAutoModeEnabled : false;
+    } catch (err) { return false; }
+}
+
 export async function saveAutoContinueMaxTimeSetting(value) {
     try {
         await updateGlobalState({ autoContinueMaxRetries: value });
@@ -205,4 +218,46 @@ export async function saveTeamModeSettings(index, isEnabled) {
     try {
         await updateGlobalState({ teamModeIndex: index, isTeamModeEnabled: isEnabled });
     } catch (e) {}
+}
+
+
+// --- Voice Language Setting ---
+export async function saveVoiceLanguageSetting(lang) {
+    try {
+        const { updateGlobalState } = await import("./db.mjs");
+        await updateGlobalState({ voiceLanguage: lang });
+    } catch (e) {
+        console.error("Error saving voice language setting", e);
+    }
+}
+
+export async function getVoiceLanguageSetting() {
+    try {
+        const { getGlobalState } = await import("./db.mjs");
+        const state = await getGlobalState();
+        return state.voiceLanguage !== undefined ? state.voiceLanguage : "auto";
+    } catch (e) {
+        return "auto";
+    }
+}
+
+
+// --- Voice Provider Setting ---
+export async function saveVoiceProviderSetting(provider) {
+    try {
+        const { updateGlobalState } = await import("./db.mjs");
+        await updateGlobalState({ voiceProvider: provider });
+    } catch (e) {
+        console.error("Error saving voice provider setting", e);
+    }
+}
+
+export async function getVoiceProviderSetting() {
+    try {
+        const { getGlobalState } = await import("./db.mjs");
+        const state = await getGlobalState();
+        return state.voiceProvider !== undefined ? state.voiceProvider : "offline";
+    } catch (e) {
+        return "offline";
+    }
 }

@@ -64,6 +64,8 @@ const StateAnnotation = {
   currentModel: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'bigpickle' },
   autoPermissionMode: { reducer: (x, y) => y !== undefined ? y : x, default: () => 'sensitive' },
   isAutoPromptEnabled: { reducer: (x, y) => y !== undefined ? y : x, default: () => false },
+  voiceLanguage: { reducer: (x, y) => y !== undefined ? y : x, default: () => "auto" },
+  voiceProvider: { reducer: (x, y) => y !== undefined ? y : x, default: () => "offline" },
   agentPersistentMemory: { reducer: (x, y) => y !== undefined ? y : x, default: () => '' },
   sessionUndoStack: { reducer: (x, y) => y !== undefined ? y : x, default: () => [] },
   userKeys: { reducer: (x, y) => y !== undefined ? y : x, default: () => ({}) },
