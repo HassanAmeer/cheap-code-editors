@@ -1,7 +1,9 @@
 import { spawn } from 'child_process';
 import { getSafePath } from './file-system.mjs';
+import { writeDebugLog } from '../agent/utils/logger.mjs';
 
 export async function runTerminalCommand(command, cwdRelative = '.') {
+  writeDebugLog("Tool [Terminal]: Execute Command", { command, cwd: cwdRelative });
   const cwd = getSafePath(cwdRelative);
   
   return new Promise((resolve) => {
@@ -34,6 +36,7 @@ export async function runTerminalCommand(command, cwdRelative = '.') {
       } else {
         result = `Command Exited with code ${code}:\nOutput:\n${stdout.substring(0, 2000)}\n\nErrors:\n${stderr.substring(0, 2000)}`;
       }
+      writeDebugLog("Tool [Terminal]: Command Finished", { command, code, errorMsg, resultPreview: result?.substring(0, 1000) });
       resolve(result);
     };
 
@@ -62,6 +65,7 @@ export async function runTerminalCommand(command, cwdRelative = '.') {
       child.stderr.resume(); // Silently drain OS pipe buffer
       child.unref();
       
+      writeDebugLog("Tool [Terminal]: Command Timeout (Backgrounded)", { command, outputSoFar: stdout?.substring(0, 500) });
       resolve(result);
     }, 40000);
   });

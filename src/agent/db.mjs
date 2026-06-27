@@ -3,6 +3,7 @@ import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import fs from 'fs';
 import path from "path";
 import { fileURLToPath } from 'url';
+import { writeDebugLog } from './utils/logger.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,6 +106,7 @@ function readSettings() {
 }
 
 function writeSettings(newSettings) {
+  writeDebugLog("DB: Saving Settings to JSON", newSettings);
   const dbDir = path.join(__dirname, '../../db');
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
   const settingsPath = path.join(dbDir, 'settings.json');
@@ -121,6 +123,7 @@ export async function getGlobalState() {
 }
 
 export async function updateGlobalState(updates) {
+  writeDebugLog("DB: Updating Global State", updates);
   const memoryKeys = ['messages', 'agentPersistentMemory', 'sessionUndoStack', 'deletedSkills'];
   const memoryUpdates = {};
   const settingUpdates = {};
@@ -158,6 +161,7 @@ export async function getChatState(chatId) {
 }
 
 export async function updateChatState(chatId, updates) {
+  writeDebugLog("DB: Updating Chat State", { chatId, updates });
   const config = { configurable: { thread_id: chatId } };
   const currentState = await memoryApp.getState(config);
   if (!currentState || !currentState.values) {
@@ -189,6 +193,7 @@ export async function purgeMemory() {
 
 // Memory FTS Functions
 export function addMemoryRecord(content) {
+  writeDebugLog("DB: Adding FTS Memory Record", content);
   const stmt = db.prepare(`INSERT INTO memory_fts (content, timestamp) VALUES (?, ?)`);
   stmt.run(content, Date.now());
 }
@@ -213,6 +218,7 @@ export function searchMemory(query, limit = 5) {
 }
 
 export async function getRagContext(query, projectsDir) {
+  writeDebugLog("DB: RAG Context Fetch", { query });
   let prefetchData = "";
   try {
     const memResults = searchMemory(query, 3);

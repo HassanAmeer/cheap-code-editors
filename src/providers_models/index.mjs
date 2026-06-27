@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
 import { theme } from '../ui/theme.mjs';
 import { providerKeys } from './keys.mjs';
+import { writeDebugLog } from '../agent/utils/logger.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -217,6 +218,44 @@ function getClientForProvider(providerStr) {
       : getClientForProvider('OpenCode');
   } else {
     client = getClientForProvider('OpenCode');
+  }
+
+  // Wrap the chat.completions.create method to automatically log requests, responses, and errors
+  if (client && client.chat && client.chat.completions && typeof client.chat.completions.create === 'function') {
+    const originalCreate = client.chat.completions.create.bind(client.chat.completions);
+    client.chat.completions.create = async function (body, options) {
+      writeDebugLog(`API Request -> Provider: ${provider}, Model: ${body.model}`, {
+        messages_count: body.messages?.length,
+        tools_count: body.tools?.length,
+        body_preview: { ...body, messages: '[Omitted for brevity]' }
+      });
+      
+      const startTime = Date.now();
+      try {
+        const response = await originalCreate(body, options);
+        const duration = Date.now() - startTime;
+        
+        writeDebugLog(`API Response <- Provider: ${provider}, Model: ${body.model}`, {
+          duration_ms: duration,
+          status: "success",
+          usage: response.usage,
+          choices: response.choices?.map(c => ({
+            finish_reason: c.finish_reason,
+            message: { role: c.message?.role, tool_calls: c.message?.tool_calls?.map(tc => tc.function?.name) }
+          }))
+        });
+        return response;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        writeDebugLog(`API Error <- Provider: ${provider}, Model: ${body.model}`, {
+          duration_ms: duration,
+          status: error.status || "error",
+          message: error.message,
+          stack: error.stack
+        }, "ERROR");
+        throw error;
+      }
+    };
   }
 
   clientCache[provider] = client;

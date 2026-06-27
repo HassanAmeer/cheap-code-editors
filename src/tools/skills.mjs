@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { PROJECTS_DIR, getWorkspaceTree } from './file-system.mjs';
+import { writeDebugLog } from '../agent/utils/logger.mjs';
 const getSkillsDir = () => path.join(PROJECTS_DIR, '.agents', 'skills');
 function getSafeSkillPath(skillName) {
   if (!skillName || typeof skillName !== 'string' || skillName.trim() === '') {
@@ -231,6 +232,7 @@ export async function readSkillContent(skillName) {
 
 // Add or update a custom skill
 export async function addCustomSkill(skillName, name, description, content, overwrite = false) {
+  writeDebugLog("Tool [Skills]: Add Custom Skill", { skillName, overwrite });
   await ensureSkillsDir();
   const skillPath = getSafeSkillPath(skillName);
   if (!(await exists(skillPath))) {
@@ -256,6 +258,7 @@ import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 // Remove a skill folder
 export async function removeSkill(skillName) {
+  writeDebugLog("Tool [Skills]: Remove Skill", { skillName });
   const skillPath = getSafeSkillPath(skillName);
   if (await exists(skillPath)) {
     await fs.rm(skillPath, { recursive: true, force: true });

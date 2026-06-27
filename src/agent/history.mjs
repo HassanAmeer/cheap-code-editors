@@ -5,8 +5,10 @@ import {
 } from './db.mjs';
 
 import { getClientForModel } from '../providers_models/index.mjs';
+import { writeDebugLog } from './utils/logger.mjs';
 
 export async function saveChatHistory(chatId, messages, currentModel = 'bigpickle') {
+    writeDebugLog("History: Save Chat History", { chatId, messageCount: messages.length });
     try {
         let finalMessages = messages;
         if (messages.length > 20) {
@@ -40,6 +42,7 @@ export async function saveChatHistory(chatId, messages, currentModel = 'bigpickl
 }
 
 export async function loadChatHistory(chatId) {
+    writeDebugLog("History: Load Chat History", { chatId });
     try {
         const state = await getChatState(chatId);
         return state ? state.messages : null;
@@ -82,6 +85,7 @@ export async function getAvailableChats() {
 }
 
 export async function deleteAllChats() {
+    writeDebugLog("History: Delete All Chats", {});
     try {
         await deleteAllChatThreads();
         return true;
@@ -89,6 +93,7 @@ export async function deleteAllChats() {
 }
 
 export async function deleteChat(chatId) {
+    writeDebugLog("History: Delete Chat", { chatId });
     try {
         await deleteChatThread(chatId);
         return true;

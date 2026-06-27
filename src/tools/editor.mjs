@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import { exec } from 'child_process';
 import { getSafePath, PROJECTS_DIR } from './file-system.mjs';
 import { theme } from '../ui/theme.mjs';
+import { writeDebugLog } from '../agent/utils/logger.mjs';
 
 function triggerCodegraphSync() {
   exec('npx codegraph sync', { cwd: PROJECTS_DIR }, (err) => {
@@ -139,6 +140,7 @@ function printColorfulDiff(filename, oldContent, newContent) {
 // ============================================================
 
 export async function editFile(relativePath, newContent, saveSnapshot = true) {
+  writeDebugLog("Tool [Editor]: Edit File", { relativePath, saveSnapshot, contentPreview: newContent?.substring(0, 500) });
   const filePath = getSafePath(relativePath);
   return await withLock(filePath, async () => {
     try {
@@ -160,6 +162,7 @@ export async function editFile(relativePath, newContent, saveSnapshot = true) {
       addMemoryRecord(`Edited file: ${relativePath}`);
       return `Successfully edited file: ${relativePath}`;
     } catch (error) {
+      writeDebugLog("Tool [Editor]: Edit File Error", error, "ERROR");
       return `Error editing file: ${error.message}`;
     }
   });
@@ -173,6 +176,7 @@ export async function markFileAsCreated(relativePath) {
 }
 
 export async function undoAction(relativePath) {
+  writeDebugLog("Tool [Editor]: Undo Action", { relativePath });
   const filePath = getSafePath(relativePath);
   return await withLock(filePath, async () => {
     try {
@@ -204,12 +208,14 @@ export async function undoAction(relativePath) {
         throw writeErr;
       }
     } catch (error) {
+      writeDebugLog("Tool [Editor]: Undo Error", error, "ERROR");
       return `Error undoing file: ${error.message}`;
     }
   });
 }
 
 export async function replaceLines(relativePath, startLine, endLine, newContent, saveSnapshot = true) {
+  writeDebugLog("Tool [Editor]: Replace Lines", { relativePath, startLine, endLine, saveSnapshot });
   const filePath = getSafePath(relativePath);
   return await withLock(filePath, async () => {
     try {
@@ -239,6 +245,7 @@ export async function replaceLines(relativePath, startLine, endLine, newContent,
       printColorfulDiff(relativePath, oldContent, modifiedContent);
       return `Successfully replaced lines ${startLine}-${endLine} in ${relativePath}.`;
     } catch (error) {
+      writeDebugLog("Tool [Editor]: Replace Lines Error", error, "ERROR");
       throw new Error(`Failed to replace lines in file: ${error.message}`);
     }
   });

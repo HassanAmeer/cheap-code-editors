@@ -30,6 +30,7 @@ import { handleExit } from './utils/process.mjs';
 import { askInputWithSlashCatch } from './utils/input.mjs';
 import { executeTool } from './core/tool-executor.mjs';
 import { executeSlashCommand } from './core/slash-commands.mjs';
+import { writeDebugLog } from './utils/logger.mjs';
 
 // Auto-Healer and UI imports
 import { startAutoHealer } from './auto-healer.mjs';
@@ -40,6 +41,7 @@ import { handleThemePrompt } from '../ui/theme.mjs';
 
 export async function startChatLoop() {
   const teamSettings = await getTeamModeSettings();
+  writeDebugLog("App: Start Chat Loop", { teamModeIndex: teamSettings.teamModeIndex, isTeamModeEnabled: teamSettings.isTeamModeEnabled });
 
   const state = {
     autoPermissionMode: await getAutoPermissionSetting(),
@@ -570,6 +572,7 @@ export async function startChatLoop() {
 
     // Print the user message to the terminal now that the input block is cleared!
     const userPrintText = typeof query === 'string' ? query : (Array.isArray(query) ? query.map(c => c.text || '').join(' ') : String(query));
+    writeDebugLog("App: User Input", { query: userPrintText });
     console.log(theme.accent('🫥 ') + '❯ ' + userPrintText + '\n');
 
     while (turnIsActive && turnLoopCount < MAX_TURN_LOOPS) {
@@ -899,6 +902,10 @@ export async function startChatLoop() {
 
           process.stdout.write('\n\n');
 
+          writeDebugLog("App: Agent AI Response Generated", { 
+             contentLength: responseMessage.content?.length, 
+             tool_calls: responseMessage.tool_calls?.map(tc => tc.function?.name) 
+          });
           state.messages.push(responseMessage);
 
           if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
@@ -931,7 +938,9 @@ export async function startChatLoop() {
 
               let toolResult;
               try {
+                writeDebugLog(`App: Executing Tool: ${toolName}`, { argsPreview: args?.substring(0, 500) });
                 toolResult = await executeTool(toolName, args, toolCtx);
+                writeDebugLog(`App: Tool Result: ${toolName}`, { resultPreview: typeof toolResult === 'string' ? toolResult.substring(0, 500) : "Object returned" });
                 if (typeof toolResult !== 'string') {
                   toolResult = JSON.stringify(toolResult, null, 2);
                 }
@@ -940,6 +949,7 @@ export async function startChatLoop() {
                   toolResult = "Task cancelled by user.";
                 } else {
                   toolResult = `Error executing tool: ${e.message}`;
+                  writeDebugLog(`App: Tool Execution Error: ${toolName}`, e, "ERROR");
                 }
               }
 
@@ -1032,6 +1042,7 @@ export async function startChatLoop() {
 
           saveChatHistory(state.chatId, state.messages, state.currentModel);
         } catch (apiErr) {
+          writeDebugLog("App: AI Loop API Error / Crash", { name: apiErr.name, message: apiErr.message, stack: apiErr.stack }, "ERROR");
           if (renderInterval) clearInterval(renderInterval);
           if (eraseStickyFn) eraseStickyFn();
 
