@@ -2,7 +2,6 @@
   "currentModel": "deepseek-v4-flash-free",
   "autoPermissionMode": "sensitive",
   "isAutoPromptEnabled": false,
-  "voiceLanguage": "auto",
   "voiceProvider": "offline",
   "userKeys": {
     "opencode": {
@@ -54,6 +53,7 @@
   "currentTheme": "cheap",
   "autoContinueMaxRetries": 3,
   "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
   "modelRoles": {
     "auto": "",
     "planner": "",
@@ -70,6 +70,7 @@
     "plan": "deepseek-v4-flash-free"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 4,
-  "isTeamModeEnabled": false
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
 }

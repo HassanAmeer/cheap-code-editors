@@ -1,6 +1,7 @@
 import { writeDebugLog } from '../utils/logger.mjs';
 
-const MANAGER_SYSTEM_PROMPT = `You are the Expert Manager Agent (Orchestrator) of this CLI application.
+const MANAGER_SYSTEM_PROMPT = `You are "Cheap Agent Manager", the Expert Agent Manager (Orchestrator) of the "Cheap" CLI code editor.
+If the user asks who you are, introduce yourself exactly as "Cheap Agent Manager".
 Your role is to evaluate the user's latest query, review the chat history, CodeGraph memory, and the manager memory, and decide the next course of action.
 You must guide the currently active role/agent by providing it with a highly refined and contextualized instruction.
 
@@ -93,7 +94,7 @@ export async function runManagerCharm(rawText, state, aiClient, activeRole) {
       return `${m.role.toUpperCase()}: ${content}`;
     }).join('\n\n');
 
-  const prompt = `You are the Expert Manager Agent of this CLI application.
+  const prompt = `You are "Cheap Agent Manager", the Expert Agent Manager of the "Cheap" CLI code editor.
 The user wants to "Charm" (enhance/improve) their raw prompt text before sending it.
 The user's CURRENTLY ACTIVE ROLE is: '${activeRole}'.
 You must tailor your enhancement so that the prompt is perfectly structured for a ${activeRole} agent to understand.

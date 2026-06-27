@@ -1582,3 +1582,2589 @@
 {
   "chatId": "chat_1782556313008"
 }
+
+=================================================================
+[2026-06-27T12:14:32.058Z] [INFO] App: Start Chat Loop
+-----------------------------------------------------------------
+{
+  "teamModeIndex": 4,
+  "isTeamModeEnabled": false
+}
+
+=================================================================
+[2026-06-27T12:14:38.930Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:14:38.932Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:14:38.936Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "tools_count": 19,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "run_terminal_command",
+          "description": "Run a bash shell command securely in the projects folder.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "cwdRelative": {
+                "type": "string",
+                "description": "Path relative to projects directory"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_html_plan",
+          "description": "Generate an HTML plan document and automatically open it in the user's browser for review. Call this tool ONLY when you are in Plan Mode and have gathered all required details.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "htmlContent": {
+                "type": "string",
+                "description": "The full HTML string including styles and content of the plan."
+              }
+            },
+            "required": [
+              "htmlContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_file",
+          "description": "Create a new file.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "content"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_file",
+          "description": "Read a file's content. Automatically prepends line numbers. Use startLine and endLine to read specific chunks of large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "Optional. Line number to start reading from"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "Optional. Line number to stop reading at"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "edit_file",
+          "description": "Edit/Overwrite file. DO NOT USE FOR FILES OVER 100 LINES! Use replace_lines_in_file instead to save tokens and time.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "newContent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "replace_lines_in_file",
+          "description": "Replace specific lines in a file. HIGHLY PREFERRED over edit_file for large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "1-indexed start line to replace"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "1-indexed end line to replace"
+              },
+              "newContent": {
+                "type": "string",
+                "description": "The new content to insert in place of the removed lines"
+              }
+            },
+            "required": [
+              "relativePath",
+              "startLine",
+              "endLine",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "undo_action",
+          "description": "Undo the last edit on a file by restoring its .bak copy.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "list_directory",
+          "description": "List directory contents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_web",
+          "description": "Search the internet globally.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "fetch_website",
+          "description": "Extract raw text from a specific URL.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_skill",
+          "description": "Read a skill file's instructions to understand best practices.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "skillName": {
+                "type": "string",
+                "description": "Name of the skill folder (e.g. 'react-best-practices')"
+              }
+            },
+            "required": [
+              "skillName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "update_memory",
+          "description": "Save important facts, file structures, or line numbers to your persistent memory so you don't forget them.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "memory_text": {
+                "type": "string",
+                "description": "The content to add or update in your memory pad."
+              }
+            },
+            "required": [
+              "memory_text"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "run_browser_automation",
+          "description": "Launch a visible browser window and run an autonomous sub-agent to navigate, click, type, play videos, search websites, or log into web services.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "The complete goal/query for the browser agent (e.g. 'go to youtube and play Coldplay song')."
+              },
+              "closeBrowserBehavior": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "keep_open",
+                  "close"
+                ],
+                "description": "Optional. Decides if the browser should close after finishing. Defaults to 'auto'."
+              },
+              "executionMode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "interactive"
+                ],
+                "description": "Optional. 'interactive' triggers step-by-step confirmation and manual pause. Defaults to 'auto'."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "query_codegraph",
+          "description": "Search for symbols in the codebase index. Provide a search query.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "searchQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "searchQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "explore_codegraph",
+          "description": "Explore an area: get relevant symbols' source + call paths in one shot.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "exploreQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "exploreQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "view_codegraph_node",
+          "description": "Get one symbol's source + caller/callee trail, or read a file with line numbers + dependents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "init_codegraph",
+          "description": "Initialize or sync the CodeGraph index for the project.",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "impact_codegraph",
+          "description": "Perform impact analysis on a symbol or file before refactoring to see what will break.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_memory",
+          "description": "Search the agent's long-term SQLite memory for past fixes or knowledge.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_tokens": 8192,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}
+
+=================================================================
+[2026-06-27T12:14:41.288Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 2352,
+  "status": "success"
+}
+
+=================================================================
+[2026-06-27T12:14:44.415Z] [INFO] App: Agent AI Response Generated
+-----------------------------------------------------------------
+{
+  "contentLength": 451
+}
+
+=================================================================
+[2026-06-27T12:14:44.416Z] [INFO] History: Save Chat History
+-----------------------------------------------------------------
+{
+  "chatId": "chat_1782562472059",
+  "messageCount": 3
+}
+
+=================================================================
+[2026-06-27T12:14:52.173Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 4,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:14:54.394Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:14:54.394Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:14:54.399Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "hy",
+  "managerMemory": [],
+  "activeRole": "fixer"
+}
+
+=================================================================
+[2026-06-27T12:14:54.399Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:15:00.475Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 6076,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 892,
+    "completion_tokens": 570,
+    "total_tokens": 1462,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 505
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 892
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:15:00.475Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user has simply greeted again. No task or request is present. I will respond directly with a friendly greeting to engage further.",
+  "action": "respond",
+  "agent": "auto",
+  "instruction": "Hey! 👋 How can I assist you today?"
+}
+
+=================================================================
+[2026-06-27T12:20:50.967Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:20:50.968Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:20:50.969Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "hy",
+  "managerMemory": [
+    {
+      "query": "hy",
+      "decision": {
+        "reasoning": "The user has simply greeted again. No task or request is present. I will respond directly with a friendly greeting to engage further.",
+        "action": "respond",
+        "agent": "auto",
+        "instruction": "Hey! 👋 How can I assist you today?"
+      }
+    }
+  ],
+  "activeRole": "fixer"
+}
+
+=================================================================
+[2026-06-27T12:20:50.969Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:20:56.482Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 5513,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 992,
+    "completion_tokens": 426,
+    "total_tokens": 1418,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 342
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 992
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:20:56.482Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user's latest query is just a greeting ('hy') again. No actionable task is present. The current role is 'fixer', but no fixing is needed. I will respond directly with a friendly greeting.",
+  "action": "respond",
+  "agent": "fixer",
+  "instruction": "Hey again! How can I help you? 😊"
+}
+
+=================================================================
+[2026-06-27T12:23:30.449Z] [INFO] App: Start Chat Loop
+-----------------------------------------------------------------
+{
+  "teamModeIndex": 4,
+  "isTeamModeEnabled": false
+}
+
+=================================================================
+[2026-06-27T12:23:59.132Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:23:59.133Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:23:59.139Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "hy",
+  "managerMemory": [],
+  "activeRole": "fixer"
+}
+
+=================================================================
+[2026-06-27T12:23:59.140Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:24:03.659Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 4519,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 762,
+    "completion_tokens": 292,
+    "total_tokens": 1054,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 224
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 762
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:24:03.660Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "User's query 'hy' is a simple greeting. No work is needed. I will respond directly.",
+  "action": "respond",
+  "agent": "fixer",
+  "suggested_role": null,
+  "instruction": "Hello! How can I assist you today?"
+}
+
+=================================================================
+[2026-06-27T12:25:15.701Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 5,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:25:16.248Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 6,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:25:18.016Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 7,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:25:31.467Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:26:08.273Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": false,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:26:12.366Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:26:12.367Z] [INFO] Tool [Terminal]: Execute Command
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "cwd": "/Users/mac"
+}
+
+=================================================================
+[2026-06-27T12:26:13.209Z] [INFO] Tool [Terminal]: Command Finished
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "code": 1,
+  "errorMsg": null,
+  "resultPreview": "Command Exited with code 1:\nOutput:\n\n\nErrors:\n\u001b[31m✗\u001b[0m CodeGraph not initialized in /Users/mac\n"
+}
+
+=================================================================
+[2026-06-27T12:26:13.209Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:26:13.210Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 4,
+  "tools_count": 19,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "run_terminal_command",
+          "description": "Run a bash shell command securely in the projects folder.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "cwdRelative": {
+                "type": "string",
+                "description": "Path relative to projects directory"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_html_plan",
+          "description": "Generate an HTML plan document and automatically open it in the user's browser for review. Call this tool ONLY when you are in Plan Mode and have gathered all required details.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "htmlContent": {
+                "type": "string",
+                "description": "The full HTML string including styles and content of the plan."
+              }
+            },
+            "required": [
+              "htmlContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_file",
+          "description": "Create a new file.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "content"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_file",
+          "description": "Read a file's content. Automatically prepends line numbers. Use startLine and endLine to read specific chunks of large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "Optional. Line number to start reading from"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "Optional. Line number to stop reading at"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "edit_file",
+          "description": "Edit/Overwrite file. DO NOT USE FOR FILES OVER 100 LINES! Use replace_lines_in_file instead to save tokens and time.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "newContent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "replace_lines_in_file",
+          "description": "Replace specific lines in a file. HIGHLY PREFERRED over edit_file for large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "1-indexed start line to replace"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "1-indexed end line to replace"
+              },
+              "newContent": {
+                "type": "string",
+                "description": "The new content to insert in place of the removed lines"
+              }
+            },
+            "required": [
+              "relativePath",
+              "startLine",
+              "endLine",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "undo_action",
+          "description": "Undo the last edit on a file by restoring its .bak copy.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "list_directory",
+          "description": "List directory contents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_web",
+          "description": "Search the internet globally.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "fetch_website",
+          "description": "Extract raw text from a specific URL.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_skill",
+          "description": "Read a skill file's instructions to understand best practices.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "skillName": {
+                "type": "string",
+                "description": "Name of the skill folder (e.g. 'react-best-practices')"
+              }
+            },
+            "required": [
+              "skillName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "update_memory",
+          "description": "Save important facts, file structures, or line numbers to your persistent memory so you don't forget them.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "memory_text": {
+                "type": "string",
+                "description": "The content to add or update in your memory pad."
+              }
+            },
+            "required": [
+              "memory_text"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "run_browser_automation",
+          "description": "Launch a visible browser window and run an autonomous sub-agent to navigate, click, type, play videos, search websites, or log into web services.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "The complete goal/query for the browser agent (e.g. 'go to youtube and play Coldplay song')."
+              },
+              "closeBrowserBehavior": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "keep_open",
+                  "close"
+                ],
+                "description": "Optional. Decides if the browser should close after finishing. Defaults to 'auto'."
+              },
+              "executionMode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "interactive"
+                ],
+                "description": "Optional. 'interactive' triggers step-by-step confirmation and manual pause. Defaults to 'auto'."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "query_codegraph",
+          "description": "Search for symbols in the codebase index. Provide a search query.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "searchQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "searchQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "explore_codegraph",
+          "description": "Explore an area: get relevant symbols' source + call paths in one shot.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "exploreQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "exploreQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "view_codegraph_node",
+          "description": "Get one symbol's source + caller/callee trail, or read a file with line numbers + dependents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "init_codegraph",
+          "description": "Initialize or sync the CodeGraph index for the project.",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "impact_codegraph",
+          "description": "Perform impact analysis on a symbol or file before refactoring to see what will break.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_memory",
+          "description": "Search the agent's long-term SQLite memory for past fixes or knowledge.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_tokens": 8192,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}
+
+=================================================================
+[2026-06-27T12:26:14.950Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 1740,
+  "status": "success"
+}
+
+=================================================================
+[2026-06-27T12:26:16.695Z] [INFO] App: Agent AI Response Generated
+-----------------------------------------------------------------
+{
+  "contentLength": 250
+}
+
+=================================================================
+[2026-06-27T12:26:16.696Z] [INFO] History: Save Chat History
+-----------------------------------------------------------------
+{
+  "chatId": "chat_1782563010450",
+  "messageCount": 5
+}
+
+=================================================================
+[2026-06-27T12:29:16.357Z] [INFO] App: Start Chat Loop
+-----------------------------------------------------------------
+{
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false
+}
+
+=================================================================
+[2026-06-27T12:29:18.640Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:29:18.641Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "hy"
+}
+
+=================================================================
+[2026-06-27T12:29:18.645Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "tools_count": 19,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "run_terminal_command",
+          "description": "Run a bash shell command securely in the projects folder.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "cwdRelative": {
+                "type": "string",
+                "description": "Path relative to projects directory"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_html_plan",
+          "description": "Generate an HTML plan document and automatically open it in the user's browser for review. Call this tool ONLY when you are in Plan Mode and have gathered all required details.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "htmlContent": {
+                "type": "string",
+                "description": "The full HTML string including styles and content of the plan."
+              }
+            },
+            "required": [
+              "htmlContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_file",
+          "description": "Create a new file.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "content"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_file",
+          "description": "Read a file's content. Automatically prepends line numbers. Use startLine and endLine to read specific chunks of large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "Optional. Line number to start reading from"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "Optional. Line number to stop reading at"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "edit_file",
+          "description": "Edit/Overwrite file. DO NOT USE FOR FILES OVER 100 LINES! Use replace_lines_in_file instead to save tokens and time.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "newContent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "replace_lines_in_file",
+          "description": "Replace specific lines in a file. HIGHLY PREFERRED over edit_file for large files.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              },
+              "startLine": {
+                "type": "integer",
+                "description": "1-indexed start line to replace"
+              },
+              "endLine": {
+                "type": "integer",
+                "description": "1-indexed end line to replace"
+              },
+              "newContent": {
+                "type": "string",
+                "description": "The new content to insert in place of the removed lines"
+              }
+            },
+            "required": [
+              "relativePath",
+              "startLine",
+              "endLine",
+              "newContent"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "undo_action",
+          "description": "Undo the last edit on a file by restoring its .bak copy.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "relativePath"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "list_directory",
+          "description": "List directory contents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "relativePath": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_web",
+          "description": "Search the internet globally.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "fetch_website",
+          "description": "Extract raw text from a specific URL.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "read_skill",
+          "description": "Read a skill file's instructions to understand best practices.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "skillName": {
+                "type": "string",
+                "description": "Name of the skill folder (e.g. 'react-best-practices')"
+              }
+            },
+            "required": [
+              "skillName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "update_memory",
+          "description": "Save important facts, file structures, or line numbers to your persistent memory so you don't forget them.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "memory_text": {
+                "type": "string",
+                "description": "The content to add or update in your memory pad."
+              }
+            },
+            "required": [
+              "memory_text"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "run_browser_automation",
+          "description": "Launch a visible browser window and run an autonomous sub-agent to navigate, click, type, play videos, search websites, or log into web services.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "The complete goal/query for the browser agent (e.g. 'go to youtube and play Coldplay song')."
+              },
+              "closeBrowserBehavior": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "keep_open",
+                  "close"
+                ],
+                "description": "Optional. Decides if the browser should close after finishing. Defaults to 'auto'."
+              },
+              "executionMode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "interactive"
+                ],
+                "description": "Optional. 'interactive' triggers step-by-step confirmation and manual pause. Defaults to 'auto'."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "query_codegraph",
+          "description": "Search for symbols in the codebase index. Provide a search query.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "searchQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "searchQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "explore_codegraph",
+          "description": "Explore an area: get relevant symbols' source + call paths in one shot.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "exploreQuery": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "exploreQuery"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "view_codegraph_node",
+          "description": "Get one symbol's source + caller/callee trail, or read a file with line numbers + dependents.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "init_codegraph",
+          "description": "Initialize or sync the CodeGraph index for the project.",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "impact_codegraph",
+          "description": "Perform impact analysis on a symbol or file before refactoring to see what will break.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "nodeName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "search_memory",
+          "description": "Search the agent's long-term SQLite memory for past fixes or knowledge.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_tokens": 8192,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}
+
+=================================================================
+[2026-06-27T12:29:21.525Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 2879,
+  "status": "success"
+}
+
+=================================================================
+[2026-06-27T12:29:21.967Z] [INFO] App: Agent AI Response Generated
+-----------------------------------------------------------------
+{
+  "contentLength": 39
+}
+
+=================================================================
+[2026-06-27T12:29:21.968Z] [INFO] History: Save Chat History
+-----------------------------------------------------------------
+{
+  "chatId": "chat_1782563356358",
+  "messageCount": 3
+}
+
+=================================================================
+[2026-06-27T12:29:28.170Z] [INFO] DB: Saving Settings to JSON
+-----------------------------------------------------------------
+{
+  "currentModel": "deepseek-v4-flash-free",
+  "autoPermissionMode": "sensitive",
+  "isAutoPromptEnabled": false,
+  "voiceProvider": "offline",
+  "userKeys": {
+    "opencode": {
+      "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
+      "baseURL": "https://opencode.ai/zen/v1"
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": "https://integrate.api.nvidia.com/v1"
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/"
+    },
+    "openrouter": {
+      "apiKey": "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",
+      "baseURL": "https://openrouter.ai/api/v1"
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": "https://api.openai.com/v1"
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": "https://api.poolside.ai/v1"
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": "https://ai-gateway.vercel.sh"
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4/"
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": "https://api.moonshot.cn/v1"
+    },
+    "zenmux": {
+      "apiKey": "sk-ai-v1-d422f85b49789653ab00ccdd2ae5396449f341ac4610580895f7b6bc05a124aa",
+      "baseURL": "https://zenmux.ai/api/v1"
+    }
+  },
+  "isSoundEnabled": true,
+  "currentTheme": "cheap",
+  "autoContinueMaxRetries": 3,
+  "isThinkingHidden": false,
+  "isManagerAgentEnabled": true,
+  "modelRoles": {
+    "auto": "",
+    "planner": "",
+    "builder": "big-pickle",
+    "fixer": "deepseek-v4-flash-free",
+    "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
+    "web_search": "deepseek-v4-flash-free",
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
+  },
+  "tokenUsageLimit": 0,
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false,
+  "voiceLanguage": "auto"
+}
+
+=================================================================
+[2026-06-27T12:29:32.155Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:29:32.156Z] [INFO] Tool [Terminal]: Execute Command
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "cwd": "/Users/mac"
+}
+
+=================================================================
+[2026-06-27T12:29:32.698Z] [INFO] Tool [Terminal]: Command Finished
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "code": 1,
+  "errorMsg": null,
+  "resultPreview": "Command Exited with code 1:\nOutput:\n\n\nErrors:\n\u001b[31m✗\u001b[0m CodeGraph not initialized in /Users/mac\n"
+}
+
+=================================================================
+[2026-06-27T12:29:32.698Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:29:32.701Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "name",
+  "managerMemory": [],
+  "activeRole": "plan+build+fix+review"
+}
+
+=================================================================
+[2026-06-27T12:29:32.702Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:29:36.380Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 3678,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 787,
+    "completion_tokens": 280,
+    "total_tokens": 1067,
+    "prompt_tokens_details": {
+      "cached_tokens": 640
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 173
+    },
+    "prompt_cache_hit_tokens": 640,
+    "prompt_cache_miss_tokens": 147
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:29:36.380Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user's query 'name' is ambiguous. They could be asking for the application's name, the assistant's name, or something else. To proceed effectively, I need to ask for clarification.",
+  "action": "ask_clarification",
+  "agent": "auto",
+  "suggested_role": null,
+  "instruction": "Could you please clarify what you mean by 'name'? Are you asking for my name, the application name, or something else?"
+}
+
+=================================================================
+[2026-06-27T12:29:55.296Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "means your name"
+}
+
+=================================================================
+[2026-06-27T12:29:55.296Z] [INFO] Tool [Terminal]: Execute Command
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"means\"",
+  "cwd": "/Users/mac"
+}
+
+=================================================================
+[2026-06-27T12:29:55.845Z] [INFO] Tool [Terminal]: Command Finished
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"means\"",
+  "code": 1,
+  "errorMsg": null,
+  "resultPreview": "Command Exited with code 1:\nOutput:\n\n\nErrors:\n\u001b[31m✗\u001b[0m CodeGraph not initialized in /Users/mac\n"
+}
+
+=================================================================
+[2026-06-27T12:29:55.845Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "means your name"
+}
+
+=================================================================
+[2026-06-27T12:29:55.846Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "means your name",
+  "managerMemory": [
+    {
+      "query": "name",
+      "decision": {
+        "reasoning": "The user's query 'name' is ambiguous. They could be asking for the application's name, the assistant's name, or something else. To proceed effectively, I need to ask for clarification.",
+        "action": "ask_clarification",
+        "agent": "auto",
+        "suggested_role": null,
+        "instruction": "Could you please clarify what you mean by 'name'? Are you asking for my name, the application name, or something else?"
+      }
+    }
+  ],
+  "activeRole": "plan+build+fix+review"
+}
+
+=================================================================
+[2026-06-27T12:29:55.846Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:30:01.594Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 5748,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 949,
+    "completion_tokens": 508,
+    "total_tokens": 1457,
+    "prompt_tokens_details": {
+      "cached_tokens": 640
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 413
+    },
+    "prompt_cache_hit_tokens": 640,
+    "prompt_cache_miss_tokens": 309
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:30:01.594Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user clarified that they are asking for my name. This is a simple question that does not require any planning, building, fixing, or reviewing. I can respond directly.",
+  "action": "respond",
+  "agent": "auto",
+  "instruction": "My name is Expert Agent Manager (Orchestrator). You can also call me 'Assistant' or whatever you prefer! How can I help you today?"
+}
+
+=================================================================
+[2026-06-27T12:30:28.247Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "and this app cli name "
+}
+
+=================================================================
+[2026-06-27T12:30:28.248Z] [INFO] Tool [Terminal]: Execute Command
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "cwd": "/Users/mac"
+}
+
+=================================================================
+[2026-06-27T12:30:28.791Z] [INFO] Tool [Terminal]: Command Finished
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "code": 1,
+  "errorMsg": null,
+  "resultPreview": "Command Exited with code 1:\nOutput:\n\n\nErrors:\n\u001b[31m✗\u001b[0m CodeGraph not initialized in /Users/mac\n"
+}
+
+=================================================================
+[2026-06-27T12:30:28.791Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "and this app cli name "
+}
+
+=================================================================
+[2026-06-27T12:30:28.792Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "and this app cli name ",
+  "managerMemory": [
+    {
+      "query": "name",
+      "decision": {
+        "reasoning": "The user's query 'name' is ambiguous. They could be asking for the application's name, the assistant's name, or something else. To proceed effectively, I need to ask for clarification.",
+        "action": "ask_clarification",
+        "agent": "auto",
+        "suggested_role": null,
+        "instruction": "Could you please clarify what you mean by 'name'? Are you asking for my name, the application name, or something else?"
+      }
+    },
+    {
+      "query": "means your name",
+      "decision": {
+        "reasoning": "The user clarified that they are asking for my name. This is a simple question that does not require any planning, building, fixing, or reviewing. I can respond directly.",
+        "action": "respond",
+        "agent": "auto",
+        "instruction": "My name is Expert Agent Manager (Orchestrator). You can also call me 'Assistant' or whatever you prefer! How can I help you today?"
+      }
+    }
+  ],
+  "activeRole": "plan+build+fix+review"
+}
+
+=================================================================
+[2026-06-27T12:30:28.792Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:30:37.703Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 8911,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 1163,
+    "completion_tokens": 807,
+    "total_tokens": 1970,
+    "prompt_tokens_details": {
+      "cached_tokens": 640
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 730
+    },
+    "prompt_cache_hit_tokens": 640,
+    "prompt_cache_miss_tokens": 523
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:30:37.703Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user is asking about the name of this CLI application. This is a simple question that does not require any delegation or role change. I can respond directly.",
+  "action": "respond",
+  "agent": "auto",
+  "instruction": "The CLI application is called 'Expert Agent Manager' (Orchestrator)."
+}
+
+=================================================================
+[2026-06-27T12:33:48.811Z] [INFO] App: Start Chat Loop
+-----------------------------------------------------------------
+{
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false
+}
+
+=================================================================
+[2026-06-27T12:34:00.454Z] [INFO] App: Start Chat Loop
+-----------------------------------------------------------------
+{
+  "teamModeIndex": 8,
+  "isTeamModeEnabled": false
+}
+
+=================================================================
+[2026-06-27T12:34:02.829Z] [INFO] DB: RAG Context Fetch
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:34:02.830Z] [INFO] Tool [Terminal]: Execute Command
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "cwd": "/Users/mac"
+}
+
+=================================================================
+[2026-06-27T12:34:03.377Z] [INFO] Tool [Terminal]: Command Finished
+-----------------------------------------------------------------
+{
+  "command": "npx codegraph query \"name\"",
+  "code": 1,
+  "errorMsg": null,
+  "resultPreview": "Command Exited with code 1:\nOutput:\n\n\nErrors:\n\u001b[31m✗\u001b[0m CodeGraph not initialized in /Users/mac\n"
+}
+
+=================================================================
+[2026-06-27T12:34:03.377Z] [INFO] App: User Input
+-----------------------------------------------------------------
+{
+  "query": "name"
+}
+
+=================================================================
+[2026-06-27T12:34:03.382Z] [INFO] Manager: Running Orchestrator Agent
+-----------------------------------------------------------------
+{
+  "userQuery": "name",
+  "managerMemory": [],
+  "activeRole": "plan+build+fix+review"
+}
+
+=================================================================
+[2026-06-27T12:34:03.383Z] [INFO] API Request -> Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "messages_count": 2,
+  "body_preview": {
+    "model": "deepseek-v4-flash-free",
+    "messages": "[Omitted for brevity]",
+    "temperature": 0.1
+  }
+}
+
+=================================================================
+[2026-06-27T12:34:10.287Z] [INFO] API Response <- Provider: opencode, Model: deepseek-v4-flash-free
+-----------------------------------------------------------------
+{
+  "duration_ms": 6903,
+  "status": "success",
+  "usage": {
+    "prompt_tokens": 796,
+    "completion_tokens": 588,
+    "total_tokens": 1384,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 508
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 796
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant"
+      }
+    }
+  ]
+}
+
+=================================================================
+[2026-06-27T12:34:10.287Z] [INFO] Manager: Decision Parsed
+-----------------------------------------------------------------
+{
+  "reasoning": "The user's query is simply 'name', which appears to be asking for my identity. Per instructions, I should introduce myself exactly as 'Cheap Agent Manager'. This is a simple query requiring no work, so action is respond.",
+  "action": "respond",
+  "agent": "auto",
+  "instruction": "Cheap Agent Manager"
+}

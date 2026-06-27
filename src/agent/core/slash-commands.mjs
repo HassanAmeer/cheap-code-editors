@@ -140,8 +140,8 @@ export async function executeSlashCommand(cmdInput, ctx) {
         : '👁 hide_thinking  - Hide AI Thinking Blocks: OFF';
 
       const managerAgentChoiceName = state.isManagerAgentEnabled
-        ? '🤖 manager_agent  - Manager Agent (Auto Orchestrator): ON'
-        : '🤖 manager_agent  - Manager Agent (Auto Orchestrator): OFF';
+        ? '🤖 manager_agent  - Agent Manager (Auto Orchestrator): ON'
+        : '🤖 manager_agent  - Agent Manager (Auto Orchestrator): OFF';
 
       const rawChoices = [
         { name: '⊘ clear         - Clear terminal and preserve memory', value: '/clear' },
@@ -838,9 +838,9 @@ Instructions for you (The Architect):
     const { saveManagerAgentSetting } = await import('../history.mjs');
     await saveManagerAgentSetting(state.isManagerAgentEnabled);
     if (state.isManagerAgentEnabled) {
-      console.log(theme.success(`✔ Manager Agent: ON 🤖\n`) + theme.dim(`  The Manager Orchestrator will now analyze all tasks and delegate them appropriately.\n`));
+      console.log(theme.success(`✔ Agent Manager: ON 🤖\n`) + theme.dim(`  The Manager Orchestrator will now analyze all tasks and delegate them appropriately.\n`));
     } else {
-      console.log(theme.success(`✔ Manager Agent: OFF 🤖\n`) + theme.dim(`  Tasks will directly execute on the active role without Manager interference.\n`));
+      console.log(theme.success(`✔ Agent Manager: OFF 🤖\n`) + theme.dim(`  Tasks will directly execute on the active role without Manager interference.\n`));
     }
     return { action: 'continue' };
   }

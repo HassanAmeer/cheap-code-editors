@@ -572,7 +572,7 @@ export async function startChatLoop() {
     state.messages.push(userMsgObj);
 
     // Print the user message to the terminal now that the input block is cleared!
-    const userPrintText = typeof query === 'string' ? query : (Array.isArray(query) ? query.map(c => c.text || '').join(' ') : String(query));
+    let userPrintText = typeof query === 'string' ? query : (Array.isArray(query) ? query.map(m => m.text || '').join('\n') : JSON.stringify(query));
     writeDebugLog("App: User Input", { query: userPrintText });
     console.log(theme.accent('🫥 ') + '❯ ' + userPrintText + '\n');
 
@@ -723,135 +723,139 @@ export async function startChatLoop() {
         try {
           // Determine effective model: use role-specific model if set
           const TEAM_MODE_NAMES = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
-          const currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
-          
+          let currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
+
           let delegatedRole = null;
           let managerDecision = null;
-          
+
           if (state.isManagerAgentEnabled) {
             const { getManagerMemory, saveManagerMemory } = await import('./db.mjs');
             const { runManagerAgent } = await import('./core/manager_agent.mjs');
-            
+
             const managerMemory = await getManagerMemory(state.chatId);
-            
-            state.currentSpinnerText = theme.dim('Manager Agent is thinking...');
-            renderSpinner();
-            
+
+            state.currentSpinnerText = theme.dim('Agent Manager is thinking...');
+            spinner.start();
+
             const aiClientManager = getClientForModel(state.modelRoles['auto'] || state.currentModel);
             managerDecision = await runManagerAgent(userPrintText, state, managerMemory, aiClientManager, currentTeamModeName);
-            
-            if (managerDecision.action === 'cancel') {
-               console.log(theme.warning(`\n[Manager Cancelled]: ${managerDecision.reasoning}\n`));
-               managerMemory.push({ query: userPrintText, decision: managerDecision });
-               await saveManagerMemory(state.chatId, managerMemory);
-               turnIsActive = false;
-               break;
-            }
-            
-            if (!state.isThinkingHidden && managerDecision.reasoning) {
-               console.log(theme.dim(`\n[Manager Thinking]: ${managerDecision.reasoning}`));
-            }
-            
-            if (managerDecision.action === 'delegate') {
-               delegatedRole = managerDecision.agent || 'auto';
-               if (!state.isThinkingHidden) {
-                  console.log(theme.dim(`[Manager Delegating to ${delegatedRole}]: ${managerDecision.instruction}\n`));
-               }
-               managerMemory.push({ query: userPrintText, decision: managerDecision });
-               await saveManagerMemory(state.chatId, managerMemory);
-            } else if (managerDecision.action === 'suggest_role_change') {
-               spinner.stop();
-               spinner.clear();
-               if (process.stdin.isTTY) process.stdin.setRawMode(false);
-               
-               const { confirm } = await import('@inquirer/prompts');
-               const answer = await confirm({ 
-                 message: `\n[Manager Agent] You are currently in '${currentTeamModeName}' mode, but this task seems better suited for '${managerDecision.suggested_role}'. Switch active role?`, 
-                 default: true 
-               });
-               
-               if (process.stdin.isTTY) process.stdin.setRawMode(true);
-               spinner.start();
-               
-               if (answer) {
-                 const { saveTeamModeSettings } = await import('./history.mjs');
-                 const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
-                 const newIdx = roles.indexOf(managerDecision.suggested_role) + 1;
-                 if (newIdx > 0) {
-                     state.teamModeIndex = newIdx;
-                     await saveTeamModeSettings(newIdx, state.isTeamModeEnabled);
-                     delegatedRole = managerDecision.suggested_role;
-                     if (!state.isThinkingHidden) console.log(theme.dim(`\n[Manager Switched Active Role to ${delegatedRole}]: ${managerDecision.instruction}\n`));
-                 } else {
-                     delegatedRole = managerDecision.suggested_role || 'auto';
-                 }
-               } else {
-                 delegatedRole = currentTeamModeName;
-                 if (!state.isThinkingHidden) console.log(theme.dim(`\n[Manager Delegating to ${delegatedRole} (User Kept Role)]: ${managerDecision.instruction}\n`));
-               }
-               
-               managerMemory.push({ query: userPrintText, decision: managerDecision, userAcceptedChange: answer });
-               await saveManagerMemory(state.chatId, managerMemory);
-            } else if (managerDecision.action === 'ask_plan_approval') {
-               spinner.stop();
-               spinner.clear();
-               if (process.stdin.isTTY) process.stdin.setRawMode(false);
-               
-               const { select, input } = await import('@inquirer/prompts');
-               const choice = await select({
-                 message: `\n[Manager Agent] The Planner has generated a plan. Would you like to proceed?`,
-                 choices: [
-                   { name: 'Yes (Proceed to Builder)', value: 'yes' },
-                   { name: 'No (Stop Execution)', value: 'no' },
-                   { name: 'Custom Message (Modify Plan)', value: 'custom' }
-                 ]
-               });
 
-               if (choice === 'no') {
-                 console.log(theme.dim("\n[Manager] Execution stopped by user."));
-                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                 turnIsActive = false;
-                 break;
-               } else if (choice === 'custom') {
-                 const customMsg = await input({ message: "Enter your feedback/modifications for the plan:" });
-                 state.messages.push({ role: 'user', content: `[User Plan Feedback]: ${customMsg}` });
-                 userPrintText = `[User Plan Feedback]: ${customMsg}`;
-                 managerMemory.push({ query: userPrintText, decision: managerDecision });
-                 await saveManagerMemory(state.chatId, managerMemory);
-                 
-                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                 spinner.start();
-                 continue;
-               } else if (choice === 'yes') {
-                 const proceedMsg = "[User Plan Approval]: The plan is approved. Proceed with building the plan.";
-                 state.messages.push({ role: 'user', content: proceedMsg });
-                 userPrintText = proceedMsg;
-                 managerMemory.push({ query: userPrintText, decision: managerDecision });
-                 await saveManagerMemory(state.chatId, managerMemory);
-                 
-                 const { saveTeamModeSettings } = await import('./history.mjs');
-                 const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
-                 const builderIdx = roles.indexOf('builder') + 1;
-                 if (builderIdx > 0 && currentTeamModeName !== 'builder') {
-                     state.teamModeIndex = builderIdx;
-                     await saveTeamModeSettings(builderIdx, state.isTeamModeEnabled);
-                     currentTeamModeName = 'builder';
-                 }
-                 
-                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                 spinner.start();
-                 continue;
-               }
+            spinner.stop();
+            spinner.clear();
+            state.currentSpinnerText = '';
+
+            if (managerDecision.action === 'cancel') {
+              console.log(theme.warning(`\n[Manager Cancelled]: ${managerDecision.reasoning}\n`));
+              managerMemory.push({ query: userPrintText, decision: managerDecision });
+              await saveManagerMemory(state.chatId, managerMemory);
+              turnIsActive = false;
+              break;
+            }
+
+            if (!state.isThinkingHidden && managerDecision.reasoning) {
+              console.log(theme.dim(`\n[Manager Thinking]: ${managerDecision.reasoning}`));
+            }
+
+            if (managerDecision.action === 'delegate') {
+              delegatedRole = managerDecision.agent || 'auto';
+              if (!state.isThinkingHidden) {
+                console.log(theme.dim(`[Manager Delegating to ${delegatedRole}]: ${managerDecision.instruction}\n`));
+              }
+              managerMemory.push({ query: userPrintText, decision: managerDecision });
+              await saveManagerMemory(state.chatId, managerMemory);
+            } else if (managerDecision.action === 'suggest_role_change') {
+              spinner.stop();
+              spinner.clear();
+              if (process.stdin.isTTY) process.stdin.setRawMode(false);
+
+              const { confirm } = await import('@inquirer/prompts');
+              const answer = await confirm({
+                message: `\n[Agent Manager] You are currently in '${currentTeamModeName}' mode, but this task seems better suited for '${managerDecision.suggested_role}'. Switch active role?`,
+                default: true
+              });
+
+              if (process.stdin.isTTY) process.stdin.setRawMode(true);
+              spinner.start();
+
+              if (answer) {
+                const { saveTeamModeSettings } = await import('./history.mjs');
+                const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
+                const newIdx = roles.indexOf(managerDecision.suggested_role) + 1;
+                if (newIdx > 0) {
+                  state.teamModeIndex = newIdx;
+                  await saveTeamModeSettings(newIdx, state.isTeamModeEnabled);
+                  delegatedRole = managerDecision.suggested_role;
+                  if (!state.isThinkingHidden) console.log(theme.dim(`\n[Manager Switched Active Role to ${delegatedRole}]: ${managerDecision.instruction}\n`));
+                } else {
+                  delegatedRole = managerDecision.suggested_role || 'auto';
+                }
+              } else {
+                delegatedRole = currentTeamModeName;
+                if (!state.isThinkingHidden) console.log(theme.dim(`\n[Manager Delegating to ${delegatedRole} (User Kept Role)]: ${managerDecision.instruction}\n`));
+              }
+
+              managerMemory.push({ query: userPrintText, decision: managerDecision, userAcceptedChange: answer });
+              await saveManagerMemory(state.chatId, managerMemory);
+            } else if (managerDecision.action === 'ask_plan_approval') {
+              spinner.stop();
+              spinner.clear();
+              if (process.stdin.isTTY) process.stdin.setRawMode(false);
+
+              const { select, input } = await import('@inquirer/prompts');
+              const choice = await select({
+                message: `\n[Agent Manager] The Planner has generated a plan. Would you like to proceed?`,
+                choices: [
+                  { name: 'Yes (Proceed to Builder)', value: 'yes' },
+                  { name: 'No (Stop Execution)', value: 'no' },
+                  { name: 'Custom Message (Modify Plan)', value: 'custom' }
+                ]
+              });
+
+              if (choice === 'no') {
+                console.log(theme.dim("\n[Manager] Execution stopped by user."));
+                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                turnIsActive = false;
+                break;
+              } else if (choice === 'custom') {
+                const customMsg = await input({ message: "Enter your feedback/modifications for the plan:" });
+                state.messages.push({ role: 'user', content: `[User Plan Feedback]: ${customMsg}` });
+                userPrintText = `[User Plan Feedback]: ${customMsg}`;
+                managerMemory.push({ query: userPrintText, decision: managerDecision });
+                await saveManagerMemory(state.chatId, managerMemory);
+
+                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                spinner.start();
+                continue;
+              } else if (choice === 'yes') {
+                const proceedMsg = "[User Plan Approval]: The plan is approved. Proceed with building the plan.";
+                state.messages.push({ role: 'user', content: proceedMsg });
+                userPrintText = proceedMsg;
+                managerMemory.push({ query: userPrintText, decision: managerDecision });
+                await saveManagerMemory(state.chatId, managerMemory);
+
+                const { saveTeamModeSettings } = await import('./history.mjs');
+                const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
+                const builderIdx = roles.indexOf('builder') + 1;
+                if (builderIdx > 0 && currentTeamModeName !== 'builder') {
+                  state.teamModeIndex = builderIdx;
+                  await saveTeamModeSettings(builderIdx, state.isTeamModeEnabled);
+                  currentTeamModeName = 'builder';
+                }
+
+                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                spinner.start();
+                continue;
+              }
             } else if (managerDecision.action === 'respond' || managerDecision.action === 'ask_clarification') {
-               if (!state.isThinkingHidden) {
-                  console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]\n`));
-               }
-               console.log(marked(managerDecision.instruction || ""));
-               managerMemory.push({ query: userPrintText, decision: managerDecision });
-               await saveManagerMemory(state.chatId, managerMemory);
-               state.messages.push({ role: 'assistant', content: managerDecision.instruction });
-               turnIsActive = false;
-               break;
+              if (!state.isThinkingHidden) {
+                console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]\n`));
+              }
+              console.log(marked(managerDecision.instruction || ""));
+              managerMemory.push({ query: userPrintText, decision: managerDecision });
+              await saveManagerMemory(state.chatId, managerMemory);
+              state.messages.push({ role: 'assistant', content: managerDecision.instruction });
+              turnIsActive = false;
+              break;
             }
           }
 
@@ -976,8 +980,8 @@ export async function startChatLoop() {
 
           let injectedManagerMsg = false;
           if (managerDecision && managerDecision.action === 'delegate') {
-             state.messages.push({ role: 'system', content: `[Manager Instruction to ${delegatedRole}]: ${managerDecision.instruction}` });
-             injectedManagerMsg = true;
+            state.messages.push({ role: 'system', content: `[Manager Instruction to ${delegatedRole}]: ${managerDecision.instruction}` });
+            injectedManagerMsg = true;
           }
 
           const response = await aiClient.chat.completions.create({
@@ -991,7 +995,7 @@ export async function startChatLoop() {
           }, { signal: abortController.signal });
 
           if (injectedManagerMsg) {
-             state.messages.pop(); // Remove temporary instruction to prevent polluting history
+            state.messages.pop(); // Remove temporary instruction to prevent polluting history
           }
 
           let streamFinishReason = null;
@@ -1044,9 +1048,9 @@ export async function startChatLoop() {
 
           process.stdout.write('\n\n');
 
-          writeDebugLog("App: Agent AI Response Generated", { 
-             contentLength: responseMessage.content?.length, 
-             tool_calls: responseMessage.tool_calls?.map(tc => tc.function?.name) 
+          writeDebugLog("App: Agent AI Response Generated", {
+            contentLength: responseMessage.content?.length,
+            tool_calls: responseMessage.tool_calls?.map(tc => tc.function?.name)
           });
           state.messages.push(responseMessage);
 
