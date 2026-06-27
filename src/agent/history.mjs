@@ -1,7 +1,8 @@
 import { 
   getGlobalState, updateGlobalState, 
   getChatState, updateChatState, 
-  getAllChatThreads, deleteChatThread, deleteAllChatThreads 
+  getAllChatThreads, deleteChatThread, deleteAllChatThreads,
+  readSettings, updateSettings
 } from './db.mjs';
 
 import { getClientForModel } from '../providers_models/index.mjs';
@@ -102,26 +103,26 @@ export async function deleteChat(chatId) {
 
 export async function saveLastModel(model) {
     try {
-        await updateGlobalState({ currentModel: model });
+        updateSettings({ currentModel: model });
     } catch (err) { }
 }
 
 export async function getLastModel() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.currentModel || null;
     } catch (err) { return null; }
 }
 
 export async function saveAutoPermissionSetting(enabled) {
     try {
-        await updateGlobalState({ autoPermissionMode: enabled });
+        updateSettings({ autoPermissionMode: enabled });
     } catch (err) { }
 }
 
 export async function getAutoPermissionSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         if (state.autoPermissionMode !== undefined && state.autoPermissionMode !== null) {
             return state.autoPermissionMode;
         }
@@ -131,85 +132,85 @@ export async function getAutoPermissionSetting() {
 
 export async function saveAutoPromptSetting(enabled) {
     try {
-        await updateGlobalState({ isAutoPromptEnabled: enabled });
+        updateSettings({ isAutoPromptEnabled: enabled });
     } catch (err) { }
 }
 
 export async function getAutoPromptSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.isAutoPromptEnabled !== undefined && state.isAutoPromptEnabled !== null ? state.isAutoPromptEnabled : false;
     } catch (err) { return false; }
 }
 
 export async function saveAutoModeSetting(enabled) {
     try {
-        await updateGlobalState({ isAutoModeEnabled: enabled });
+        updateSettings({ isAutoModeEnabled: enabled });
     } catch (err) { }
 }
 
 export async function getAutoModeSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.isAutoModeEnabled !== undefined && state.isAutoModeEnabled !== null ? state.isAutoModeEnabled : false;
     } catch (err) { return false; }
 }
 
 export async function saveAutoContinueMaxTimeSetting(value) {
     try {
-        await updateGlobalState({ autoContinueMaxRetries: value });
+        updateSettings({ autoContinueMaxRetries: value });
     } catch (err) { }
 }
 
 export async function getAutoContinueMaxTimeSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.autoContinueMaxRetries !== undefined && state.autoContinueMaxRetries !== null ? state.autoContinueMaxRetries : 3;
     } catch (err) { return 3; }
 }
 
 export async function saveThinkingHiddenSetting(enabled) {
     try {
-        await updateGlobalState({ isThinkingHidden: enabled });
+        updateSettings({ isThinkingHidden: enabled });
     } catch (err) { }
 }
 
 export async function getThinkingHiddenSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : true;
     } catch (err) { return true; }
 }
 
 export async function saveModelRoles(roles) {
     try {
-        await updateGlobalState({ modelRoles: roles });
+        updateSettings({ modelRoles: roles });
     } catch (err) { }
 }
 
 export async function getModelRoles() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.modelRoles && typeof state.modelRoles === 'object' ? state.modelRoles : {};
     } catch (err) { return {}; }
 }
 
 export async function saveTokenUsageLimitSetting(value) {
     try {
-        await updateGlobalState({ tokenUsageLimit: value });
+        updateSettings({ tokenUsageLimit: value });
     } catch (err) { }
 }
 
 export async function getTokenUsageLimitSetting() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.tokenUsageLimit !== undefined && state.tokenUsageLimit !== null ? state.tokenUsageLimit : 0;
     } catch (err) { return 0; }
 }
 
 export async function getTeamModeSettings() {
     try {
-        const state = await getGlobalState();
+        const state = readSettings();
         return {
             teamModeIndex: state.teamModeIndex !== undefined ? state.teamModeIndex : 3,
             isTeamModeEnabled: state.isTeamModeEnabled !== undefined ? state.isTeamModeEnabled : false
@@ -221,37 +222,18 @@ export async function getTeamModeSettings() {
 
 export async function saveTeamModeSettings(index, isEnabled) {
     try {
-        await updateGlobalState({ teamModeIndex: index, isTeamModeEnabled: isEnabled });
+        updateSettings({ teamModeIndex: index, isTeamModeEnabled: isEnabled });
     } catch (e) {}
 }
 
 
-// --- Voice Language Setting ---
-export async function saveVoiceLanguageSetting(lang) {
-    try {
-        const { updateGlobalState } = await import("./db.mjs");
-        await updateGlobalState({ voiceLanguage: lang });
-    } catch (e) {
-        console.error("Error saving voice language setting", e);
-    }
-}
 
-export async function getVoiceLanguageSetting() {
-    try {
-        const { getGlobalState } = await import("./db.mjs");
-        const state = await getGlobalState();
-        return state.voiceLanguage !== undefined ? state.voiceLanguage : "auto";
-    } catch (e) {
-        return "auto";
-    }
-}
 
 
 // --- Voice Provider Setting ---
 export async function saveVoiceProviderSetting(provider) {
     try {
-        const { updateGlobalState } = await import("./db.mjs");
-        await updateGlobalState({ voiceProvider: provider });
+        updateSettings({ voiceProvider: provider });
     } catch (e) {
         console.error("Error saving voice provider setting", e);
     }
@@ -259,8 +241,7 @@ export async function saveVoiceProviderSetting(provider) {
 
 export async function getVoiceProviderSetting() {
     try {
-        const { getGlobalState } = await import("./db.mjs");
-        const state = await getGlobalState();
+        const state = readSettings();
         return state.voiceProvider !== undefined ? state.voiceProvider : "offline";
     } catch (e) {
         return "offline";

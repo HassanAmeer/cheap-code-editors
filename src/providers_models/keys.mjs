@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,19 +118,28 @@ const defaultKeys = {
 // Deep copy defaults to providerKeys
 export const providerKeys = JSON.parse(JSON.stringify(defaultKeys));
 
-// Asynchronously load user configuration at startup
-let userKeys = {};
-try {
-  const state = await getGlobalState();
-  if (state && state.userKeys) {
-    userKeys = state.userKeys;
+// Helper to read and write settings.json directly
+const SETTINGS_FILE = path.join(__dirname, '../../db/settings.json');
+
+function getSettings() {
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    } catch (e) {
+      return {};
+    }
   }
-} catch (e) {
-  // Silently ignore — this is expected on first run (no global_state row yet)
-  if (process.env.DEBUG === 'true') {
-    console.error("Warning: Failed to load userKeys from LangGraph SQLite.", e.message);
-  }
+  return {};
 }
+
+function saveSettings(settings) {
+  const dbDir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+}
+
+// Load user configuration directly from settings.json
+let userKeys = getSettings().userKeys || {};
 
 // Override default values with user keys if present
 for (const provider of Object.keys(userKeys)) {
@@ -148,7 +156,9 @@ for (const provider of Object.keys(userKeys)) {
 // Save user keys dynamically and update memory bindings
 export async function saveUserKeys(updatedKeysConfig) {
   try {
-    await updateGlobalState({ userKeys: updatedKeysConfig });
+    const settings = getSettings();
+    settings.userKeys = updatedKeysConfig;
+    saveSettings(settings);
 
     // In-memory sync: reset to defaults first, then apply updated keys
     for (const provider of Object.keys(providerKeys)) {
@@ -172,10 +182,5 @@ export async function saveUserKeys(updatedKeysConfig) {
 
 // Load user keys helper
 export async function loadUserKeys() {
-  try {
-    const state = await getGlobalState();
-    return state.userKeys || {};
-  } catch (e) {
-    return {};
-  }
+  return getSettings().userKeys || {};
 }

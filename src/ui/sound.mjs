@@ -2,22 +2,25 @@ import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import { readSettings, updateSettings } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const BELL_PATH = path.join(__dirname, '../../assets/bell.wav');
-import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
 
 // Load initial sound preference asynchronously from state (default: ON)
 let soundEnabled = true;
-try {
-  const state = await getGlobalState();
-  if (state.isSoundEnabled !== undefined && state.isSoundEnabled !== null) {
-    soundEnabled = state.isSoundEnabled;
+
+export async function initSound() {
+  try {
+    const state = readSettings();
+    if (state.isSoundEnabled !== undefined && state.isSoundEnabled !== null) {
+      soundEnabled = state.isSoundEnabled;
+    }
+  } catch (err) {
+    // Ignore
   }
-} catch (e) {
-  // Ignore
 }
 
 export function getSoundEnabled() {
@@ -25,10 +28,12 @@ export function getSoundEnabled() {
 }
 
 export async function setSoundEnabled(enabled) {
-  soundEnabled = enabled;
+  soundEnabled = !!enabled;
   try {
-    await updateGlobalState({ isSoundEnabled: enabled });
-  } catch (e) { }
+    updateSettings({ isSoundEnabled: enabled });
+  } catch (err) {
+    // Ignore db errors
+  }
 }
 
 /**
@@ -55,3 +60,5 @@ export function playNotification() {
     // Non-critical — silently skip
   }
 }
+
+initSound();

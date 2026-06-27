@@ -30,7 +30,7 @@ let allModels = [];
 try {
   const fileData = fs.readFileSync(MODELS_FILE, 'utf8');
   const jsonData = JSON.parse(fileData);
-  
+
   for (const providerKey of Object.keys(jsonData)) {
     const modelsArr = jsonData[providerKey] || [];
     for (const m of modelsArr) {
@@ -44,8 +44,8 @@ try {
 
       let tokensLabel = m.tokens;
       if (!tokensLabel && m.context_size) {
-        tokensLabel = m.context_size >= 1048576 
-          ? `${Math.round(m.context_size / 1048576)}M` 
+        tokensLabel = m.context_size >= 1048576
+          ? `${Math.round(m.context_size / 1048576)}M`
           : `${Math.round(m.context_size / 1024)}k`;
       }
       if (!tokensLabel) tokensLabel = '8k';
@@ -59,7 +59,7 @@ try {
         if (m.is_vision_image) supportTags.push('vision');
         if (m.web_search) supportTags.push('search');
       }
-      
+
       const isShow = m.show === true || m.is_show === true;
 
       allModels.push({
@@ -86,7 +86,7 @@ export function clearClientCache() {
 
 function hasProviderKey(providerStr) {
   const provider = (providerStr || 'opencode').toLowerCase();
-  
+
   if (provider.includes('opencode')) return true;
   if (provider.includes('nvidia') || provider === 'nvidia nim') return providerKeys.nvidia.apiKey && providerKeys.nvidia.apiKey !== "nvapi-PLACEHOLDER_KEY";
   if (provider.includes('gemini')) return !!providerKeys.gemini.apiKey;
@@ -98,7 +98,7 @@ function hasProviderKey(providerStr) {
   if (provider.includes('zai') || provider.includes('zhipuai')) return !!providerKeys.zai.apiKey;
   if (provider.includes('kimi') || provider.includes('moonshot')) return !!providerKeys.kimi.apiKey;
   if (provider.includes('zenmux')) return !!providerKeys.zenmux.apiKey;
-  
+
   return false; // Default to false if provider is unknown or key not set
 }
 
@@ -109,13 +109,10 @@ export function getValidAutoModels() {
 
 // Generate formatted choices for Inquirer (Legacy list)
 export function getModelChoices() {
-  const showProvider = process.env.SHOW_PROVIDER_NAMES !== 'false';
   return allModels
     .filter(model => model.show === true && hasProviderKey(model.provider))
     .map(model => ({
-      name: showProvider
-        ? `${model.name}\n  ${theme.dim(`Provider: ${model.provider}`)}`
-        : model.name,
+      name: model.name,
       value: model.value,
       provider: model.provider
     }));
@@ -124,18 +121,17 @@ export function getModelChoices() {
 // Generate grouped choices for custom Grid Prompt
 export function getModelsGroupedByProvider() {
   const groups = {};
-  const showProvider = process.env.SHOW_PROVIDER_NAMES !== 'false';
-  
+
   // Filter only visible models and those with configured API keys
   const visibleModels = allModels.filter(model => model.show === true && hasProviderKey(model.provider));
-  
+
   // Separate models into fast and slow groups globally
   visibleModels.forEach(model => {
     const isFast = model.fast === true;
     const groupKey = isFast ? 'Fast' : 'sometimes slow';
     const headingText = isFast ? 'Fast' : 'sometimes slow';
     const baseProvider = isFast ? 'A_Fast' : 'B_Slow';
-    
+
     if (!groups[groupKey]) {
       groups[groupKey] = {
         provider: headingText,
@@ -144,9 +140,9 @@ export function getModelsGroupedByProvider() {
         models: []
       };
     }
-    
-    const displayName = showProvider ? `${model.name} (${model.provider})` : model.name;
-    
+
+    const displayName = model.name;
+
     groups[groupKey].models.push({
       name: displayName,
       value: model.value,
@@ -155,12 +151,12 @@ export function getModelsGroupedByProvider() {
       support: model.support
     });
   });
-  
+
   // Sort groups: Fast on top, sometimes slow on bottom
   const sortedGroups = Object.values(groups).sort((a, b) => {
     return a.baseProvider.localeCompare(b.baseProvider);
   });
-  
+
   return sortedGroups;
 }
 
@@ -229,12 +225,12 @@ function getClientForProvider(providerStr) {
         tools_count: body.tools?.length,
         body_preview: { ...body, messages: '[Omitted for brevity]' }
       });
-      
+
       const startTime = Date.now();
       try {
         const response = await originalCreate(body, options);
         const duration = Date.now() - startTime;
-        
+
         writeDebugLog(`API Response <- Provider: ${provider}, Model: ${body.model}`, {
           duration_ms: duration,
           status: "success",
@@ -274,7 +270,7 @@ export function getNextModel(currentModelValue) {
   const visibleModels = allModels.filter(m => {
     if (!m.show) return false;
     const p = (m.provider || '').toLowerCase();
-    
+
     if (p.includes('opencode')) return true;
     if (p.includes('nvidia')) return providerKeys.nvidia.apiKey && providerKeys.nvidia.apiKey !== "nvapi-PLACEHOLDER_KEY";
     if (p.includes('gemini')) return !!providerKeys.gemini.apiKey;
@@ -286,7 +282,7 @@ export function getNextModel(currentModelValue) {
     if (p.includes('zai') || p.includes('zhipuai')) return !!providerKeys.zai.apiKey;
     if (p.includes('kimi') || p.includes('moonshot')) return !!providerKeys.kimi.apiKey;
     if (p.includes('zenmux')) return !!providerKeys.zenmux.apiKey;
-    
+
     return false; // If we don't know the provider, assume not configured
   });
 

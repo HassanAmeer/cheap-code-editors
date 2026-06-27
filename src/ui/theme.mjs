@@ -2,8 +2,7 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { select } from '@inquirer/prompts';
-import { getGlobalState, updateGlobalState } from '../agent/db.mjs';
+import { readSettings, updateSettings } from '../agent/db.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -330,10 +329,10 @@ export async function handleThemePrompt(state = null) {
     });
 
     if (selected && selected !== 'cancel') {
-      setCLITheme(selected);
-      try {
-        await updateGlobalState({ currentTheme: selected });
-      } catch (err) {}
+      if (selected !== currentThemeName) {
+        setCLITheme(selected);
+        updateSettings({ currentTheme: selected });
+      }
 
       const label = CHEAP_THEMES.find(t => t.name === selected)?.label || selected;
       return { action: 'redraw', message: theme.success(`✔ Theme updated to: ${label}\n`) };
@@ -348,13 +347,17 @@ export async function handleThemePrompt(state = null) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Load saved theme at startup
 // ─────────────────────────────────────────────────────────────────────────────
-try {
-  const state = await getGlobalState();
-  if (state && state.currentTheme) {
-    setCLITheme(state.currentTheme);
-  } else {
+export async function initTheme() {
+  try {
+    const state = readSettings();
+    if (state && state.currentTheme) {
+      setCLITheme(state.currentTheme);
+    } else {
+      setCLITheme('cheap');
+    }
+  } catch (e) {
     setCLITheme('cheap');
   }
-} catch (e) {
-  setCLITheme('cheap');
 }
+
+initTheme();

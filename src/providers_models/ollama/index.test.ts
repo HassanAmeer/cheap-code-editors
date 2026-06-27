@@ -237,9 +237,9 @@ describe("probeOllamaModels — /api/tags parsing", () => {
 			(url) =>
 				url.endsWith("/api/show")
 					? makeShowResponse({
-							"qwen2.context_length": 32768,
-							"qwen2.embedding_length": 3584,
-						})
+						"qwen2.context_length": 32768,
+						"qwen2.embedding_length": 3584,
+					})
 					: null,
 		])
 		const models = await probeOllamaModels("http://localhost:11434", { fetch: fetchImpl })

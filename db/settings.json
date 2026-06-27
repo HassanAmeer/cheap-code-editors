@@ -1,23 +1,72 @@
 {
-  "currentModel": "north-mini-code-free",
+  "currentModel": "deepseek-v4-flash-free",
   "autoPermissionMode": "sensitive",
   "isAutoPromptEnabled": false,
-  "voiceLanguage": "urdu",
   "voiceProvider": "offline",
-  "userKeys": {},
+  "userKeys": {
+    "opencode": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "nvidia": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "gemini": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "openrouter": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "openai": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "poolside": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "vercel": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "qwen": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "zai": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseURL": ""
+    },
+    "zenmux": {
+      "apiKey": "",
+      "baseURL": ""
+    }
+  },
   "isSoundEnabled": true,
   "currentTheme": "cheap",
   "autoContinueMaxRetries": 3,
   "isThinkingHidden": false,
   "modelRoles": {
-    "researcher": "deepseek-v4-flash-free",
+    "auto": "",
+    "planner": "",
     "builder": "big-pickle",
-    "plan": "deepseek-v4-flash-free",
-    "system_agent": "deepseek-v4-flash-free",
-    "fixer": "north-mini-code-free",
+    "fixer": "big-pickle",
     "reviewer": "deepseek-v4-flash-free",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "deepseek-v4-flash-free",
+    "researcher": "deepseek-v4-flash-free",
     "web_search": "deepseek-v4-flash-free",
-    "web_agent": "deepseek-v4-flash-free"
+    "web_agent": "deepseek-v4-flash-free",
+    "plan": "deepseek-v4-flash-free"
   },
   "tokenUsageLimit": 0,
   "teamModeIndex": 4,

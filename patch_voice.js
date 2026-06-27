@@ -173,7 +173,7 @@ if (content.includes(stopRecTarget)) {
 
 // Modify transcribeRecording
 const transcribeTarget = `export async function transcribeRecording(onProgress) {
-  const { getVoiceLanguageSetting } = await import("../history.mjs");`;
+  const { getVoiceProviderSetting } = await import("../history.mjs");`;
 
 const transcribeReplace = `export async function transcribeRecording(onProgress) {
   const { getVoiceProviderSetting } = await import("../history.mjs");
@@ -193,7 +193,7 @@ const transcribeReplace = `export async function transcribeRecording(onProgress)
     });
   }
 
-  const { getVoiceLanguageSetting } = await import("../history.mjs");`;
+  const { getVoiceProviderSetting } = await import("../history.mjs");`;
 
 if (content.includes(transcribeTarget)) {
   content = content.replace(transcribeTarget, transcribeReplace);

@@ -22,7 +22,6 @@ import { printLogo } from '../../ui/logo.mjs';
 import { getAllChatThreads, getChatState, updateChatState } from '../db.mjs';
 import { gridPrompt } from '../../ui/gridPrompt.mjs';
 import { undoAction } from '../../tools/editor.mjs';
-import { displayAgentsList } from '../../ui/agentsList.mjs';
 import { webAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
 
 async function chooseDirectoryInteractive(currentPath) {
@@ -227,12 +226,43 @@ export async function executeSlashCommand(cmdInput, ctx) {
   if (typeof query === 'string' || typeof query === 'object') {
     if (lowerCmd === '/model') {
       const groups = getModelsGroupedByProvider();
-      const selectedModel = await gridPrompt(groups, state.currentModel);
+      
+      const modeNames = [
+        'auto', 'planner', 'builder', 'fixer', 'reviewer', 
+        'plan+build', 'plan+build+fix', 'plan+build+fix+review', 
+        'system_agent', 'researcher', 'web_agent'
+      ];
+
+      let targetRole = null;
+      if (state.activeAgentMode && state.activeAgentMode !== 'default') {
+        targetRole = state.activeAgentMode;
+      } else {
+        const teamRole = modeNames[(state.teamModeIndex || 1) - 1] || 'auto';
+        if (teamRole !== 'auto') {
+          targetRole = teamRole;
+        }
+      }
+
+      let currentSelected = state.currentModel;
+      if (targetRole) {
+        if (!state.modelRoles) state.modelRoles = {};
+        currentSelected = state.modelRoles[targetRole] || state.currentModel;
+      }
+
+      const selectedModel = await gridPrompt(groups, currentSelected);
 
       if (selectedModel) {
-        state.currentModel = selectedModel;
-        await saveLastModel(state.currentModel);
-        return { action: 'redraw', message: theme.success(`\n✔ Model changed to: `) + theme.user(state.currentModel) + '\n' };
+        if (targetRole) {
+          if (!state.modelRoles) state.modelRoles = {};
+          state.modelRoles[targetRole] = selectedModel;
+          const { saveModelRoles } = await import('../history.mjs');
+          await saveModelRoles(state.modelRoles);
+          return { action: 'redraw', message: theme.success(`\n✔ Model for [${targetRole}] changed to: `) + theme.user(selectedModel) + '\n' };
+        } else {
+          state.currentModel = selectedModel;
+          await saveLastModel(state.currentModel);
+          return { action: 'redraw', message: theme.success(`\n✔ Model changed to: `) + theme.user(state.currentModel) + '\n' };
+        }
       } else {
         return { action: 'redraw', message: theme.dim("\nModel selection cancelled.\n") };
       }

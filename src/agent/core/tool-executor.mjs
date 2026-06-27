@@ -13,9 +13,7 @@ import { searchWebWithFreeSearchAPI } from '../../../researches/playwright-whole
 import { fetchWebsiteDirectly } from '../../../researches/duckduck-web-search-hidden/scraper.mjs';
 import { readSkillContent } from '../../tools/skills.mjs';
 import { queryCodegraph, exploreCodegraph, viewCodegraphNode, initCodegraph, impactCodegraph } from '../../tools/codegraph.mjs';
-import { confirmCommand, confirmFileOp } from '../utils/permissions.mjs';
 import { runAutoWebAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
-import fs from 'fs';
 import { playNotification } from '../../ui/sound.mjs';
 import { raceAbort, spawnAndCollect, checkAndInstallMissingDependencies } from '../utils/process.mjs';
 import { confirmWebAgentStart } from '../utils/permissions.mjs';

@@ -22,7 +22,7 @@ export async function gridPrompt(groups, currentModel) {
     const termWidth = process.stdout.columns || 80;
     const columns = termWidth < 90 ? 1 : 2;
     const colWidth = Math.floor(termWidth / columns) - 2;
-    
+
     let gridRows = [];
     let selectableItems = [];
 
@@ -80,7 +80,7 @@ export async function gridPrompt(groups, currentModel) {
 
       const currentItem = selectableItems[selectedIndex];
       const termHeight = process.stdout.rows || 24;
-      
+
       // Calculate how many lines we can display.
       // We want to limit the visible height to fit comfortably inside the terminal height.
       // Leave 6 lines safety margin for headers, indicators and padding.
@@ -119,21 +119,16 @@ export async function gridPrompt(groups, currentModel) {
             const isSelected = item.globalIndex === selectedIndex;
             const prefix = isSelected ? theme.success('> ') : '  ';
             const textColor = isSelected ? theme.success(item.name) : theme.dim(item.name);
-            
-            const tokensStr = item.tokens ? `${item.tokens} tokens` : '1M tokens';
-            const tokenText = ` (${tokensStr})`;
-            const tokenColor = isSelected ? theme.info(tokenText) : theme.dim(tokenText);
 
-            let supportStr = '';
-            if (item.support) {
-              supportStr = Array.isArray(item.support) ? item.support.join(', ') : item.support;
-            }
-            const supportText = supportStr ? ` [${supportStr}]` : '';
-            const supportColor = isSelected ? theme.warning(supportText) : theme.dim(supportText);
+            const tokenText = '';
+            const tokenColor = '';
 
-            const cellText = `${prefix}${textColor}${tokenColor}${supportColor}`;
-            const rawLength = 2 + item.name.length + tokenText.length + supportText.length;
-            
+            const supportText = '';
+            const supportColor = '';
+
+            const cellText = `${prefix}${textColor}`;
+            const rawLength = 2 + item.name.length;
+
             if (currentColumns > 1 && item.x < row.items.length - 1) {
               const padding = Math.max(0, currentColWidth - rawLength);
               rowStr += cellText + ' '.repeat(padding);

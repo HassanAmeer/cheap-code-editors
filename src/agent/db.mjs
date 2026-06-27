@@ -78,39 +78,80 @@ const defaultSettings = {
   currentModel: 'bigpickle',
   autoPermissionMode: 'sensitive',
   isAutoPromptEnabled: false,
-  voiceLanguage: 'auto',
+
   voiceProvider: 'offline',
-  userKeys: {},
+  userKeys: {
+    opencode: { apiKey: "", baseURL: "" },
+    nvidia: { apiKey: "", baseURL: "" },
+    gemini: { apiKey: "", baseURL: "" },
+    openrouter: { apiKey: "", baseURL: "" },
+    openai: { apiKey: "", baseURL: "" },
+    poolside: { apiKey: "", baseURL: "" },
+    vercel: { apiKey: "", baseURL: "" },
+    qwen: { apiKey: "", baseURL: "" },
+    zai: { apiKey: "", baseURL: "" },
+    kimi: { apiKey: "", baseURL: "" },
+    zenmux: { apiKey: "", baseURL: "" }
+  },
   isSoundEnabled: true,
   currentTheme: 'cheap',
   autoContinueMaxRetries: 3,
-  isThinkingHidden: true,
-  modelRoles: {},
+  isThinkingHidden: false,
+  modelRoles: {
+    "auto": "",
+    "planner": "",
+    "builder": "",
+    "fixer": "",
+    "reviewer": "",
+    "plan+build": "",
+    "plan+build+fix": "",
+    "plan+build+fix+review": "",
+    "system_agent": "",
+    "researcher": "",
+    "web_search": "",
+    "web_agent": ""
+  },
   tokenUsageLimit: 0,
   teamModeIndex: 4,
   isTeamModeEnabled: false
 };
 
-function readSettings() {
+export function readSettings() {
   const dbDir = path.join(__dirname, '../../db');
   const settingsPath = path.join(dbDir, 'settings.json');
+  let mergedSettings = { ...defaultSettings };
+
   if (fs.existsSync(settingsPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      return { ...defaultSettings, ...data };
+      mergedSettings = { ...defaultSettings, ...data };
+      mergedSettings.modelRoles = { ...defaultSettings.modelRoles, ...(data.modelRoles || {}) };
+      mergedSettings.userKeys = { ...defaultSettings.userKeys, ...(data.userKeys || {}) };
     } catch (e) {
-      return { ...defaultSettings };
+      // Use defaults if corrupted
     }
+  } else {
+    // File doesn't exist, create it so the user can view/edit the defaults
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
   }
-  return { ...defaultSettings };
+
+  return mergedSettings;
 }
 
-function writeSettings(newSettings) {
+export function writeSettings(newSettings) {
   writeDebugLog("DB: Saving Settings to JSON", newSettings);
   const dbDir = path.join(__dirname, '../../db');
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
   const settingsPath = path.join(dbDir, 'settings.json');
   fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+}
+
+export function updateSettings(updates) {
+  const current = readSettings();
+  const merged = { ...current, ...updates };
+  writeSettings(merged);
+  return merged;
 }
 
 // Wrapper functions for global settings and memory
