@@ -75,7 +75,7 @@
     "operator": "deepseek-v4-flash-free"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 2,
+  "teamModeIndex": 1,
   "isTeamModeEnabled": false,
   "voiceLanguage": "auto"
 }
