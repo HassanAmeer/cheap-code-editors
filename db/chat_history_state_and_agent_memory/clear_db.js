@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Database Clear karne ke liye niche di gayi command run karein:
+ * Database ka data clear karne ke liye niche di gayi command run karein:
  * 
  * Command (from project root):
  * node db/chat_history_state_and_agent_memory/clear_db.js
@@ -17,30 +17,50 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const filesToClear = [
-  'cli_data.db',
-  'cli_data.db-wal',
-  'cli_data.db-shm'
-];
+const dbPath = path.join(__dirname, 'cli_data.db');
 
-console.log('Database files clear ki jaa rahi hain...');
+if (!fs.existsSync(dbPath)) {
+  console.log('Database file (cli_data.db) nahi mili. Database pehle se hi clear/empty hai.');
+  process.exit(0);
+}
 
-let clearedCount = 0;
-filesToClear.forEach(file => {
-  const filePath = path.join(__dirname, file);
-  if (fs.existsSync(filePath)) {
+console.log('Database tables ka data clear kiya jaa raha hai (files delete nahi hongi)...');
+
+try {
+  const BetterSqlite3 = (await import('better-sqlite3')).default;
+  const db = new BetterSqlite3(dbPath);
+
+  // Sabhi user tables ki list fetch karein
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
+
+  let clearedTables = [];
+  for (const row of tables) {
+    const tableName = row.name;
+    
+    // FTS helper/shadow tables ko direct delete karne se bachayein
+    if (tableName.startsWith('memory_fts_')) {
+      continue;
+    }
+
     try {
-      fs.unlinkSync(filePath);
-      console.log(`Successfully deleted: ${file}`);
-      clearedCount++;
+      db.prepare(`DELETE FROM "${tableName}"`).run();
+      clearedTables.push(tableName);
     } catch (err) {
-      console.error(`Error deleting ${file}:`, err.message);
+      // Agar direct delete error de (jaise shadow tables par), to hum ignore karenge
     }
   }
-});
 
-if (clearedCount === 0) {
-  console.log('Koi database files nahi mili. Database pehle se hi clear hai.');
-} else {
-  console.log('Database successfully clear ho gaya! CLI next run par automatically new empty database create kar lega.');
+  // Database size ko shrink/reduce karne ke liye VACUUM run karein
+  db.pragma('vacuum');
+  db.close();
+
+  if (clearedTables.length > 0) {
+    console.log(`Successfully cleared data from tables: ${clearedTables.join(', ')}`);
+    console.log('Database storage successfully clear ho gaya aur database file compress ho gayi!');
+  } else {
+    console.log('Database ke andar koi tables ya data nahi mila.');
+  }
+
+} catch (error) {
+  console.error('Database clear karte waqt error aaya:', error.message);
 }
