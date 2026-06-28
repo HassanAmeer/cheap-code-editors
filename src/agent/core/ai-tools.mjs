@@ -21,6 +21,23 @@ export const aiToolsConfig = [
   {
     type: "function",
     function: {
+      name: "ask_question",
+      description: "Ask the user a multiple-choice question to clarify ambiguity. RULES: (1) Provide 3 to 5 specific, context-aware options — NEVER simple Yes/No. (2) Each option must be a concrete, actionable choice. (3) Optionally use 'context_message' to show a helpful explanation below the question. (4) User always gets a 'Write Custom Message' fallback option automatically.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: { type: "string", description: "The question to ask the user. Be specific and clear." },
+          options: { type: "array", items: { type: "string" }, description: "Array of 3 to 5 specific, actionable string options. NEVER use generic Yes/No." },
+          context_message: { type: "string", description: "Optional. A short explanatory message shown below the question to help the user understand the context or why you're asking." }
+        },
+        required: ["question", "options"]
+      }
+    }
+  },
+
+  {
+    type: "function",
+    function: {
       name: "create_html_plan",
       description: "Generate an HTML plan document and automatically open it in the user's browser for review. Call this tool ONLY when you are in Plan Mode and have gathered all required details.",
       parameters: {
@@ -276,3 +293,73 @@ export const aiToolsConfig = [
     }
   }
 ];
+
+export function getToolsForRole(teamModeIndex) {
+  const allTools = aiToolsConfig;
+  const modeIdx = parseInt(teamModeIndex, 10) || 1;
+  
+  switch (modeIdx) {
+    case 1: // Auto
+      return allTools;
+      
+    case 2: // Planner
+      return allTools.filter(t => [
+        'read_file', 'create_file', 'edit_file', 'replace_lines_in_file', 
+        'list_directory', 'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
+        'ask_question', 'run_terminal_command'
+      ].includes(t.function.name));
+      
+    case 3: // Builder
+      return allTools.filter(t => [
+        'create_file', 'read_file', 'edit_file', 'replace_lines_in_file', 
+        'undo_action', 'list_directory', 'query_codegraph', 'explore_codegraph', 
+        'view_codegraph_node', 'ask_question', 'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    case 4: // Fixer
+      return allTools.filter(t => [
+        'read_file', 'edit_file', 'replace_lines_in_file', 'undo_action', 
+        'list_directory', 'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
+        'ask_question', 'run_terminal_command', 'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    case 5: // Reviewer
+      return allTools.filter(t => [
+        'read_file', 'list_directory', 'query_codegraph', 'explore_codegraph', 
+        'view_codegraph_node', 'ask_question'
+      ].includes(t.function.name));
+      
+    case 6: // Planner + Builder
+    case 7: // Planner + Builder + Fixer
+    case 8: // Planner + Builder + Fixer + Reviewer
+      return allTools.filter(t => [
+        'read_file', 'create_file', 'edit_file', 'replace_lines_in_file', 
+        'undo_action', 'list_directory', 'query_codegraph', 'explore_codegraph', 
+        'view_codegraph_node', 'ask_question', 'run_terminal_command', 
+        'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    case 9: // System Agent
+      return allTools.filter(t => [
+        'run_terminal_command', 'read_file', 'list_directory', 
+        'ask_question', 'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    case 10: // Researcher
+      return allTools.filter(t => [
+        'search_web', 'fetch_website', 'read_file', 'list_directory', 
+        'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
+        'ask_question', 'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    case 11: // Web Agent
+      return allTools.filter(t => [
+        'run_browser_automation', 'search_web', 'fetch_website', 
+        'ask_question', 'update_memory', 'search_memory'
+      ].includes(t.function.name));
+      
+    default:
+      return allTools;
+  }
+}
+

@@ -2,7 +2,7 @@
   "currentModel": "deepseek-v4-flash-free",
   "autoPermissionMode": "sensitive",
   "isAutoPromptEnabled": false,
-  "voiceProvider": "offline",
+  "voiceProvider": "speechmatics",
   "userKeys": {
     "opencode": {
       "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
@@ -49,13 +49,13 @@
       "baseURL": "https://zenmux.ai/api/v1"
     }
   },
-  "isSoundEnabled": true,
+  "isSoundEnabled": false,
   "currentTheme": "cheap",
   "autoContinueMaxRetries": 3,
   "isThinkingHidden": false,
   "isManagerAgentEnabled": true,
   "modelRoles": {
-    "auto": "",
+    "auto": "north-mini-code-free",
     "planner": "",
     "builder": "big-pickle",
     "fixer": "deepseek-v4-flash-free",
@@ -63,14 +63,14 @@
     "plan+build": "",
     "plan+build+fix": "",
     "plan+build+fix+review": "",
-    "system_agent": "deepseek-v4-flash-free",
+    "system_agent": "north-mini-code-free",
     "researcher": "deepseek-v4-flash-free",
     "web_search": "deepseek-v4-flash-free",
     "web_agent": "deepseek-v4-flash-free",
     "plan": "deepseek-v4-flash-free"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 8,
+  "teamModeIndex": 9,
   "isTeamModeEnabled": false,
   "voiceLanguage": "auto"
 }

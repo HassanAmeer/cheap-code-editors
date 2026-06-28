@@ -530,6 +530,7 @@ export async function startChatLoop() {
     }
 
     let turnIsActive = true;
+    let hasManagerRunThisTurn = false;
     let autoContinueCurrentRetries = 0;
     let turnLoopCount = 0;
     let turnTokenUsage = 0;
@@ -728,7 +729,11 @@ export async function startChatLoop() {
           let delegatedRole = null;
           let managerDecision = null;
 
-          if (state.isManagerAgentEnabled) {
+          const bypassManagerRoles = ['system_agent', 'researcher', 'web_agent'];
+          const shouldBypassManager = bypassManagerRoles.includes(currentTeamModeName);
+
+          if (state.isManagerAgentEnabled && !hasManagerRunThisTurn && !shouldBypassManager) {
+            hasManagerRunThisTurn = true;
             const { getManagerMemory, saveManagerMemory } = await import('./db.mjs');
             const { runManagerAgent } = await import('./core/manager_agent.mjs');
 
@@ -756,7 +761,29 @@ export async function startChatLoop() {
               console.log(theme.dim(`\n[Manager Thinking]: ${managerDecision.reasoning}`));
             }
 
-            if (managerDecision.action === 'delegate') {
+            if (managerDecision.action === 'run_command') {
+              if (!state.isThinkingHidden && managerDecision.command) {
+                console.log(theme.dim(`[Manager Running Command]: ${managerDecision.command}\n`));
+              }
+              const { exec } = await import('child_process');
+              const util = await import('util');
+              const execPromise = util.promisify(exec);
+              let cmdOutput = "";
+              try {
+                spinner.text = theme.dim(`Executing: ${managerDecision.command}...`);
+                spinner.start();
+                const { stdout, stderr } = await execPromise(managerDecision.command, { cwd: process.env.PROJECTS_DIR || process.cwd() });
+                cmdOutput = (stdout || '') + (stderr || '');
+              } catch (err) {
+                cmdOutput = `Error: ${err.message}\n` + (err.stdout || '') + (err.stderr || '');
+              }
+              spinner.stop();
+              spinner.clear();
+              managerMemory.push({ query: userPrintText, decision: managerDecision, commandResult: cmdOutput.substring(0, 1500) });
+              await saveManagerMemory(state.chatId, managerMemory);
+              hasManagerRunThisTurn = false; // Manager needs to evaluate the command result
+              continue;
+            } else if (managerDecision.action === 'delegate') {
               delegatedRole = managerDecision.agent || 'auto';
               if (!state.isThinkingHidden) {
                 console.log(theme.dim(`[Manager Delegating to ${delegatedRole}]: ${managerDecision.instruction}\n`));
@@ -850,10 +877,80 @@ export async function startChatLoop() {
               if (!state.isThinkingHidden) {
                 console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]\n`));
               }
-              console.log(marked(managerDecision.instruction || ""));
+              const renderedText = marked(managerDecision.instruction || "");
+              const chunks = renderedText.split(/(\s+)/);
+
+              let managerResponseText = "";
+              let managerAnimIdx = 0;
+              let lastFullText = "";
+
+              for (const chunk of chunks) {
+                if (lastFullText) {
+                  const linesToMoveUp = countPhysicalLineFeeds(lastFullText);
+                  if (linesToMoveUp > 0) {
+                    readline.moveCursor(process.stdout, 0, -linesToMoveUp);
+                  }
+                  readline.cursorTo(process.stdout, 0);
+                  readline.clearScreenDown(process.stdout);
+                }
+
+                managerResponseText += chunk;
+                managerAnimIdx++;
+
+                const baseText = state.currentSpinnerText || theme.dim('Manager is responding...');
+                const stickyText = `\n\n${theme.accent('▍')} ${theme.info('⠋')} ${baseText}` + getStickyBottomText(managerAnimIdx);
+
+                lastFullText = managerResponseText + stickyText;
+                process.stdout.write(lastFullText);
+
+                await new Promise(r => setTimeout(r, 20));
+              }
+
+              if (lastFullText) {
+                const linesToMoveUp = countPhysicalLineFeeds(lastFullText);
+                if (linesToMoveUp > 0) {
+                  readline.moveCursor(process.stdout, 0, -linesToMoveUp);
+                }
+                readline.cursorTo(process.stdout, 0);
+                readline.clearScreenDown(process.stdout);
+
+                process.stdout.write(managerResponseText);
+              }
+              console.log();
               managerMemory.push({ query: userPrintText, decision: managerDecision });
               await saveManagerMemory(state.chatId, managerMemory);
               state.messages.push({ role: 'assistant', content: managerDecision.instruction });
+
+              if (managerDecision.options && Array.isArray(managerDecision.options) && managerDecision.options.length > 0) {
+                spinner.stop();
+                spinner.clear();
+                if (process.stdin.isTTY) process.stdin.setRawMode(false);
+                process.stdin.removeListener("keypress", preInputCollector);
+
+                const { select, input } = await import('@inquirer/prompts');
+                const choices = managerDecision.options.map(opt => ({ name: opt, value: opt }));
+                choices.push({ name: 'Write Custom Message...', value: '__custom__' });
+                
+                let answer = await select({
+                  message: 'Select an option:',
+                  choices
+                });
+
+                if (answer === '__custom__') {
+                  answer = await input({ message: 'Your message:' });
+                }
+
+                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                process.stdin.on("keypress", preInputCollector);
+                spinner.start();
+                
+                if (answer) {
+                  userPrintText = answer;
+                  hasManagerRunThisTurn = false;
+                  continue; 
+                }
+              }
+
               turnIsActive = false;
               break;
             }
@@ -984,11 +1081,27 @@ export async function startChatLoop() {
             injectedManagerMsg = true;
           }
 
+          // Dynamically rebuild the system prompt to reflect the current active role (and fresh tree/permissions)
+          const freshSystemPrompt = await buildSystemPrompt(
+            state.isAutoPromptEnabled,
+            state.autoPermissionMode,
+            state.currentModel,
+            state.teamModeIndex
+          );
+          if (state.messages.length > 0 && state.messages[0].role === 'system') {
+            state.messages[0].content = freshSystemPrompt;
+          } else {
+            state.messages.unshift({ role: 'system', content: freshSystemPrompt });
+          }
+
+          // Dynamically filter tools to enforce strict role boundaries at API level
+          const roleTools = getToolsForRole(state.teamModeIndex);
+
           const response = await aiClient.chat.completions.create({
             model: effectiveModel,
             messages: state.messages,
-            tools: aiToolsConfig,
-            tool_choice: "auto",
+            tools: roleTools.length > 0 ? roleTools : undefined,
+            tool_choice: roleTools.length > 0 ? "auto" : undefined,
             max_tokens: parseInt(process.env.OUTPUT_CONTEXT_TOKENS || "8192", 10),
             stream: true,
             stream_options: { include_usage: true }
@@ -1084,7 +1197,8 @@ export async function startChatLoop() {
 
               let toolResult;
               try {
-                writeDebugLog(`App: Executing Tool: ${toolName}`, { argsPreview: args?.substring(0, 500) });
+                const argsString = typeof args === 'string' ? args : JSON.stringify(args);
+                writeDebugLog(`App: Executing Tool: ${toolName}`, { argsPreview: argsString?.substring(0, 500) });
                 toolResult = await executeTool(toolName, args, toolCtx);
                 writeDebugLog(`App: Tool Result: ${toolName}`, { resultPreview: typeof toolResult === 'string' ? toolResult.substring(0, 500) : "Object returned" });
                 if (typeof toolResult !== 'string') {
@@ -1260,4 +1374,4 @@ export async function startChatLoop() {
 export { debugLog } from './utils/console.mjs';
 export { checkAndInstallMissingDependencies } from './utils/process.mjs';
 import { buildSystemPrompt } from './core/system-prompt.mjs';
-import { aiToolsConfig } from './core/ai-tools.mjs';
+import { aiToolsConfig, getToolsForRole } from './core/ai-tools.mjs';

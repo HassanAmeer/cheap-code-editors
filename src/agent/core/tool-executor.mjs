@@ -107,6 +107,7 @@ export async function executeTool(toolName, args, ctx) {
     safeLog(() => console.log(theme.dim(`✔ Created file: ${args.relativePath}`)));
     return res;
   }
+
   else if (toolName === "read_file") {
     state.currentSpinnerText = theme.dim(`Reading file: ${args.relativePath}`);
     const res = await raceAbort(readFile(args.relativePath, args.startLine, args.endLine), abortController.signal);
@@ -255,14 +256,38 @@ export async function executeTool(toolName, args, ctx) {
     process.stdin.removeListener("keypress", ctx.preInputCollector);
     playNotification();
 
+    // ── Display context_message if provided ──
+    if (args.context_message) {
+      console.log();
+      console.log(chalk.hex('#6C7A89')('  💡 ') + chalk.hex('#95A5A6').italic(args.context_message));
+    }
+
     let answer = "";
     try {
       if (args.options && Array.isArray(args.options) && args.options.length > 0) {
+        // Build choices with numbered styling + auto 'Write Custom Message' at the end
+        const choices = args.options.map((opt, i) => ({
+          name: chalk.hex('#BDC3C7')(`${i + 1}. `) + chalk.white(opt),
+          value: opt
+        }));
+        choices.push({
+          name: chalk.hex('#F39C12')(`✏️  Write Custom Message...`),
+          value: '__custom__'
+        });
+
         answer = await select({
           message: args.question,
-          choices: args.options.map(opt => ({ name: chalk.gray(opt), value: opt })),
+          choices,
           theme: getPromptTheme()
         });
+
+        // Handle custom message input
+        if (answer === '__custom__') {
+          answer = await input({
+            message: chalk.hex('#3498DB')('Your message:'),
+            theme: getPromptTheme()
+          });
+        }
       } else {
         answer = await input({
           message: args.question,

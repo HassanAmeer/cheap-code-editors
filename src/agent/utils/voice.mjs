@@ -22,7 +22,7 @@ function logDebug(msg) {
   try {
     global.voiceDebugSteps = global.voiceDebugSteps || [];
     global.voiceDebugSteps.push(msg);
-    
+
     // Ye check ensure karta hai ke voice ke debug logs sirf tab save hon 
     // jab `DEBUG=true` ho, taake hard drive par be-maqsad files na banain.
     if (process.env.DEBUG === 'true') {
@@ -93,11 +93,22 @@ export async function startRecording() {
       throw new Error("Speechmatics API key not found in .env (speechmatics_whisper_key)");
     }
 
-    const { createSpeechmaticsJWT } = await import("@speechmatics/auth");
-    const { RealtimeClient } = await import("@speechmatics/real-time-client");
+    let RealtimeClient, createSpeechmaticsJWT;
+    try {
+      ({ createSpeechmaticsJWT } = await import("@speechmatics/auth"));
+      ({ RealtimeClient } = await import("@speechmatics/real-time-client"));
+    } catch (importErr) {
+      logDebug("ERROR: Failed to import Speechmatics packages: " + importErr.message);
+      throw new Error("Speechmatics packages import failed. Run: npm install @speechmatics/auth @speechmatics/real-time-client\n" + importErr.message);
+    }
 
     smClient = new RealtimeClient();
+    if (!smClient) {
+      logDebug("ERROR: RealtimeClient constructor returned null/undefined");
+      throw new Error("RealtimeClient() returned null. Package version may be incompatible. Try: npm update @speechmatics/real-time-client");
+    }
     const audio_format = { type: "raw", encoding: "pcm_s16le", sample_rate: 16000 };
+
 
     smClient.addEventListener("receiveMessage", ({ data }) => {
       if (data.message === "AddTranscript") {
@@ -150,14 +161,14 @@ export async function startRecording() {
 
         if (global.isSpeechmaticsStopping) {
           if (audioBuffer.length > 0) {
-             let sendChunk = audioBuffer;
-             if (sendChunk.length % 2 !== 0) sendChunk = sendChunk.slice(0, -1);
-             smClient.sendAudio(new Uint8Array(sendChunk));
-             audioBuffer = Buffer.alloc(0);
+            let sendChunk = audioBuffer;
+            if (sendChunk.length % 2 !== 0) sendChunk = sendChunk.slice(0, -1);
+            smClient.sendAudio(new Uint8Array(sendChunk));
+            audioBuffer = Buffer.alloc(0);
           }
           return;
         }
-        
+
         if (isDebugEnabled) {
           fs.appendFileSync(debugAudioPath, chunkBuf);
         }
