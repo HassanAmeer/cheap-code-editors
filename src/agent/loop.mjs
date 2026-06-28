@@ -159,23 +159,16 @@ export async function startChatLoop() {
     // Mode segment: 9 circles representing the team mode
     const modeIdx = state.teamModeIndex || 1;
     let circles = '';
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 4; i++) {
       circles += (i === modeIdx) ? '●' : '○';
     }
     const modeNames = [
-      'auto',
-      'planner',
-      'builder',
-      'fixer',
-      'reviewer',
-      'plan+build',
-      'plan+build+fix',
-      'plan+build+fix+review',
-      'system_agent',
-      'researcher',
-      'web_agent'
+      'watcher',
+      'architect',
+      'engineer',
+      'operator'
     ];
-    const currentModeName = modeNames[modeIdx - 1] || 'auto';
+    const currentModeName = modeNames[modeIdx - 1] || 'watcher';
     const modeColor = theme.accent ? theme.accent : chalk.cyan;
     const modeSeg = `${modeColor(circles)} ${currentModeName} ${theme.dim('→ shift+tab')}`;
 
@@ -723,13 +716,13 @@ export async function startChatLoop() {
         let eraseStickyFn;
         try {
           // Determine effective model: use role-specific model if set
-          const TEAM_MODE_NAMES = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
-          let currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
+          const TEAM_MODE_NAMES = ['watcher', 'architect', 'engineer', 'operator'];
+          let currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'watcher';
 
           let delegatedRole = null;
           let managerDecision = null;
 
-          const bypassManagerRoles = ['system_agent', 'researcher', 'web_agent'];
+          const bypassManagerRoles = ['operator'];
           const shouldBypassManager = bypassManagerRoles.includes(currentTeamModeName);
 
           if (state.isManagerAgentEnabled && !hasManagerRunThisTurn && !shouldBypassManager) {
@@ -806,7 +799,7 @@ export async function startChatLoop() {
 
               if (answer) {
                 const { saveTeamModeSettings } = await import('./history.mjs');
-                const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
+                const roles = ['watcher', 'architect', 'engineer', 'operator'];
                 const newIdx = roles.indexOf(managerDecision.suggested_role) + 1;
                 if (newIdx > 0) {
                   state.teamModeIndex = newIdx;
@@ -861,12 +854,12 @@ export async function startChatLoop() {
                 await saveManagerMemory(state.chatId, managerMemory);
 
                 const { saveTeamModeSettings } = await import('./history.mjs');
-                const roles = ['auto', 'planner', 'builder', 'fixer', 'reviewer', 'plan+build', 'plan+build+fix', 'plan+build+fix+review', 'system_agent', 'researcher', 'web_agent'];
-                const builderIdx = roles.indexOf('builder') + 1;
-                if (builderIdx > 0 && currentTeamModeName !== 'builder') {
-                  state.teamModeIndex = builderIdx;
-                  await saveTeamModeSettings(builderIdx, state.isTeamModeEnabled);
-                  currentTeamModeName = 'builder';
+                const roles = ['watcher', 'architect', 'engineer', 'operator'];
+                const engineerIdx = roles.indexOf('engineer') + 1;
+                if (engineerIdx > 0 && currentTeamModeName !== 'engineer') {
+                  state.teamModeIndex = engineerIdx;
+                  await saveTeamModeSettings(engineerIdx, state.isTeamModeEnabled);
+                  currentTeamModeName = 'engineer';
                 }
 
                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -958,7 +951,7 @@ export async function startChatLoop() {
 
           const roleModel = delegatedRole ? (state.modelRoles[delegatedRole] || state.currentModel) : (state.modelRoles[currentTeamModeName]);
           const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
-          const systemModel = state.modelRoles && state.modelRoles['system_agent'];
+          const systemModel = state.modelRoles && state.modelRoles['operator'];
           const effectiveModel = roleModel || state.currentModel;
           const aiClient = getClientForModel(effectiveModel);
 
@@ -1240,7 +1233,7 @@ export async function startChatLoop() {
                   });
 
                   if (action === 'proceed') {
-                    state.teamModeIndex = 2; // Switch to Builder mode automatically
+                    state.teamModeIndex = 3; // Switch to Engineer mode automatically
                     state.globalTaskQueue.push("Plan approved. Proceed with building.");
                     turnIsActive = false;
                   } else if (action === 'cancel') {

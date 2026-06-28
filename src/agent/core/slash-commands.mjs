@@ -233,9 +233,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
       const groups = getModelsGroupedByProvider();
 
       const modeNames = [
-        'auto', 'planner', 'builder', 'fixer', 'reviewer',
-        'plan+build', 'plan+build+fix', 'plan+build+fix+review',
-        'system_agent', 'researcher', 'web_agent'
+        'watcher', 'architect', 'engineer', 'operator'
       ];
 
       let targetRole = null;
@@ -276,18 +274,10 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
-        { key: 'auto', label: 'Auto (Coordinator)', icon: '🤖' },
-        { key: 'planner', label: 'Planner', icon: '📋' },
-        { key: 'builder', label: 'Builder', icon: '🔨' },
-        { key: 'fixer', label: 'Fixer', icon: '🔧' },
-        { key: 'reviewer', label: 'Reviewer', icon: '👁️ ' },
-        { key: 'plan+build', label: 'Plan+Build', icon: '📋🔨' },
-        { key: 'plan+build+fix', label: 'Plan+Build+Fix', icon: '📋🔨🔧' },
-        { key: 'plan+build+fix+review', label: 'Plan+Build+Fix+Review', icon: '📋🔨🔧👁️' },
-        { key: 'system_agent', label: 'System Agent', icon: '⚙️ ' },
-        { key: 'researcher', label: 'Researcher', icon: '🔍' },
-        { key: 'web_agent', label: 'Web Agent', icon: '🌐' },
-        { key: 'web_search', label: 'Web Search Agent', icon: '🌐' },
+        { key: 'watcher', label: 'Watcher (Master Coordinator)', icon: '👁️' },
+        { key: 'architect', label: 'Architect (Planner + Researcher)', icon: '📐' },
+        { key: 'engineer', label: 'Engineer (Builder + Fixer + Reviewer)', icon: '🛠️' },
+        { key: 'operator', label: 'Operator (System + Web Agent)', icon: '⚙️' },
       ];
 
       // Current saved roless
@@ -850,7 +840,7 @@ Instructions for you (The Architect):
     await saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled);
     if (state.isTeamModeEnabled) {
       console.log(theme.success(`✔ Multi-Agent Team Mode: ON 👥`));
-      console.log(theme.dim(`All upcoming tasks will be processed by the Architect -> Developer -> QA pipeline.\n`));
+      console.log(theme.dim(`All upcoming tasks will be processed by the Architect -> Engineer pipeline.\n`));
     } else {
       console.log(theme.success(`✔ Multi-Agent Team Mode: OFF 👤`));
       console.log(theme.dim(`Reverted to standard fast-chat mode.\n`));

@@ -233,11 +233,11 @@ export async function getTeamModeSettings() {
     try {
         const state = readSettings();
         return {
-            teamModeIndex: state.teamModeIndex !== undefined ? state.teamModeIndex : 3,
+            teamModeIndex: state.teamModeIndex !== undefined ? state.teamModeIndex : 1,
             isTeamModeEnabled: state.isTeamModeEnabled !== undefined ? state.isTeamModeEnabled : false
         };
     } catch (e) {
-        return { teamModeIndex: 3, isTeamModeEnabled: false };
+        return { teamModeIndex: 1, isTeamModeEnabled: false };
     }
 }
 

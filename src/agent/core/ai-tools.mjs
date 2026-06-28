@@ -299,62 +299,33 @@ export function getToolsForRole(teamModeIndex) {
   const modeIdx = parseInt(teamModeIndex, 10) || 1;
   
   switch (modeIdx) {
-    case 1: // Auto
+    case 1: // Watcher (Master Coordinator — has access to ALL tools)
       return allTools;
       
-    case 2: // Planner
+    case 2: // Architect (Planner + Researcher — planning, research, codegraph, ask_question)
       return allTools.filter(t => [
-        'read_file', 'create_file', 'edit_file', 'replace_lines_in_file', 
-        'list_directory', 'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
-        'ask_question', 'run_terminal_command'
-      ].includes(t.function.name));
-      
-    case 3: // Builder
-      return allTools.filter(t => [
-        'create_file', 'read_file', 'edit_file', 'replace_lines_in_file', 
-        'undo_action', 'list_directory', 'query_codegraph', 'explore_codegraph', 
-        'view_codegraph_node', 'ask_question', 'update_memory', 'search_memory'
-      ].includes(t.function.name));
-      
-    case 4: // Fixer
-      return allTools.filter(t => [
-        'read_file', 'edit_file', 'replace_lines_in_file', 'undo_action', 
-        'list_directory', 'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
-        'ask_question', 'run_terminal_command', 'update_memory', 'search_memory'
-      ].includes(t.function.name));
-      
-    case 5: // Reviewer
-      return allTools.filter(t => [
-        'read_file', 'list_directory', 'query_codegraph', 'explore_codegraph', 
-        'view_codegraph_node', 'ask_question'
-      ].includes(t.function.name));
-      
-    case 6: // Planner + Builder
-    case 7: // Planner + Builder + Fixer
-    case 8: // Planner + Builder + Fixer + Reviewer
-      return allTools.filter(t => [
-        'read_file', 'create_file', 'edit_file', 'replace_lines_in_file', 
-        'undo_action', 'list_directory', 'query_codegraph', 'explore_codegraph', 
-        'view_codegraph_node', 'ask_question', 'run_terminal_command', 
+        'read_file', 'create_file', 'edit_file', 'replace_lines_in_file',
+        'list_directory', 'query_codegraph', 'explore_codegraph', 'view_codegraph_node',
+        'ask_question', 'run_terminal_command', 'create_html_plan',
+        'search_web', 'fetch_website',
         'update_memory', 'search_memory'
       ].includes(t.function.name));
       
-    case 9: // System Agent
+    case 3: // Engineer (Builder + Fixer + Reviewer — full code power + web search for debugging)
       return allTools.filter(t => [
-        'run_terminal_command', 'read_file', 'list_directory', 
-        'ask_question', 'update_memory', 'search_memory'
+        'create_file', 'read_file', 'edit_file', 'replace_lines_in_file',
+        'undo_action', 'list_directory', 'query_codegraph', 'explore_codegraph',
+        'view_codegraph_node', 'init_codegraph', 'impact_codegraph',
+        'ask_question', 'run_terminal_command',
+        'search_web', 'fetch_website',
+        'update_memory', 'search_memory'
       ].includes(t.function.name));
       
-    case 10: // Researcher
+    case 4: // Operator (System Agent + Web Agent — terminal, browser, system ops)
       return allTools.filter(t => [
-        'search_web', 'fetch_website', 'read_file', 'list_directory', 
-        'query_codegraph', 'explore_codegraph', 'view_codegraph_node', 
-        'ask_question', 'update_memory', 'search_memory'
-      ].includes(t.function.name));
-      
-    case 11: // Web Agent
-      return allTools.filter(t => [
-        'run_browser_automation', 'search_web', 'fetch_website', 
+        'run_terminal_command', 'run_browser_automation',
+        'read_file', 'list_directory',
+        'search_web', 'fetch_website',
         'ask_question', 'update_memory', 'search_memory'
       ].includes(t.function.name));
       
