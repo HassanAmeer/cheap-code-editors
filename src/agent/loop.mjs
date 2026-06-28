@@ -735,7 +735,7 @@ export async function startChatLoop() {
             state.currentSpinnerText = theme.dim('Agent Manager is thinking...');
             spinner.start();
 
-            const aiClientManager = getClientForModel(state.modelRoles['auto'] || state.currentModel);
+            const aiClientManager = getClientForModel(state.modelRoles['manager_agent'] || state.currentModel);
             managerDecision = await runManagerAgent(userPrintText, state, managerMemory, aiClientManager, currentTeamModeName);
 
             spinner.stop();
@@ -746,6 +746,7 @@ export async function startChatLoop() {
               console.log(theme.warning(`\n[Manager Cancelled]: ${managerDecision.reasoning}\n`));
               managerMemory.push({ query: userPrintText, decision: managerDecision });
               await saveManagerMemory(state.chatId, managerMemory);
+              import('../ui/sound.mjs').then(m => m.playNotification());
               turnIsActive = false;
               break;
             }
@@ -944,6 +945,7 @@ export async function startChatLoop() {
                 }
               }
 
+              import('../ui/sound.mjs').then(m => m.playNotification());
               turnIsActive = false;
               break;
             }

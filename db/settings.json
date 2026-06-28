@@ -67,10 +67,15 @@
     "researcher": "deepseek-v4-flash-free",
     "web_search": "deepseek-v4-flash-free",
     "web_agent": "deepseek-v4-flash-free",
-    "plan": "deepseek-v4-flash-free"
+    "plan": "deepseek-v4-flash-free",
+    "manager_agent": "deepseek-v4-flash-free",
+    "watcher": "big-pickle",
+    "architect": "deepseek-v4-flash-free",
+    "engineer": "deepseek-v4-flash-free",
+    "operator": "deepseek-v4-flash-free"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 9,
+  "teamModeIndex": 2,
   "isTeamModeEnabled": false,
   "voiceLanguage": "auto"
 }

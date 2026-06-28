@@ -427,7 +427,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         renderLineSync();
 
         import('../../providers_models/index.mjs').then(async ({ getClientForModel }) => {
-          const aiClient = getClientForModel(state.currentModel);
+          const aiClient = getClientForModel((state.modelRoles && state.modelRoles['manager_agent']) || state.currentModel);
           const TEAM_MODE_NAMES = ['watcher', 'architect', 'engineer', 'operator'];
           const activeRole = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'watcher';
 
@@ -468,7 +468,7 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
       if ((key && ((key.name === 'tab' && key.shift) || key.name === 'backtab')) || char === '\x1b[Z' || (char === '``' || buffer === '``')) {
         if (buffer === '``') { buffer = ''; cursorPos = 0; }
         if (state) {
-          state.teamModeIndex = ((state.teamModeIndex || 1) % 11) + 1;
+          state.teamModeIndex = ((state.teamModeIndex || 1) % 4) + 1;
           import('../history.mjs').then(m => m.saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled)).catch(() => {});
           renderLine();
         }

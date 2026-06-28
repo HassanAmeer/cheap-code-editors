@@ -274,6 +274,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
+        { key: 'manager_agent', label: 'Manager Agent (Orchestrator)', icon: '🧠' },
         { key: 'watcher', label: 'Watcher (Master Coordinator)', icon: '👁️' },
         { key: 'architect', label: 'Architect (Planner + Researcher)', icon: '📐' },
         { key: 'engineer', label: 'Engineer (Builder + Fixer + Reviewer)', icon: '🛠️' },
@@ -636,10 +637,10 @@ Instructions for you (The Architect):
       state.lastAiEditedFiles = [];
       state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
       state.chatId = 'chat_' + Date.now();
-      
+
       const { exec } = await import('child_process');
       exec('npx codegraph sync', { cwd: PROJECTS_DIR }, (err) => { /* Background sync */ });
-      
+
       console.log(theme.success("✔ Terminal cleared and fresh session started! (Persistent Memory Retained)\n"));
       return { action: 'continue' };
     }
