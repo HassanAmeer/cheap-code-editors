@@ -1,7 +1,4 @@
 node_modules
-doctor-memory-pkg/venv
-doctor-memory-pkg/__pycache__
-projects
 web-agent-screenshots
 .git
 .env
