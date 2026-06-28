@@ -163,10 +163,10 @@ export async function startChatLoop() {
       circles += (i === modeIdx) ? '●' : '○';
     }
     const modeNames = [
-      'watcher',
-      'architect',
-      'engineer',
-      'operator'
+      'auto',
+      'planner',
+      'coder',
+      'system&web agent'
     ];
     const currentModeName = modeNames[modeIdx - 1] || 'watcher';
     const modeColor = theme.accent ? theme.accent : chalk.cyan;
@@ -716,13 +716,13 @@ export async function startChatLoop() {
         let eraseStickyFn;
         try {
           // Determine effective model: use role-specific model if set
-          const TEAM_MODE_NAMES = ['watcher', 'architect', 'engineer', 'operator'];
-          let currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'watcher';
+          const TEAM_MODE_NAMES = ['auto', 'planner', 'coder', 'system&web agent'];
+          let currentTeamModeName = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
 
           let delegatedRole = null;
           let managerDecision = null;
 
-          const bypassManagerRoles = ['operator'];
+          const bypassManagerRoles = ['system&web agent'];
           const shouldBypassManager = bypassManagerRoles.includes(currentTeamModeName);
 
           if (state.isManagerAgentEnabled && !hasManagerRunThisTurn && !shouldBypassManager) {
@@ -735,7 +735,7 @@ export async function startChatLoop() {
             state.currentSpinnerText = theme.dim('Agent Manager is thinking...');
             spinner.start();
 
-            const aiClientManager = getClientForModel(state.modelRoles['manager_agent'] || state.currentModel);
+            const aiClientManager = getClientForModel(state.modelRoles['adviser AI'] || state.currentModel);
             managerDecision = await runManagerAgent(userPrintText, state, managerMemory, aiClientManager, currentTeamModeName);
 
             spinner.stop();
@@ -800,7 +800,7 @@ export async function startChatLoop() {
 
               if (answer) {
                 const { saveTeamModeSettings } = await import('./history.mjs');
-                const roles = ['watcher', 'architect', 'engineer', 'operator'];
+                const roles = ['auto', 'planner', 'coder', 'system&web agent'];
                 const newIdx = roles.indexOf(managerDecision.suggested_role) + 1;
                 if (newIdx > 0) {
                   state.teamModeIndex = newIdx;
@@ -855,12 +855,12 @@ export async function startChatLoop() {
                 await saveManagerMemory(state.chatId, managerMemory);
 
                 const { saveTeamModeSettings } = await import('./history.mjs');
-                const roles = ['watcher', 'architect', 'engineer', 'operator'];
-                const engineerIdx = roles.indexOf('engineer') + 1;
-                if (engineerIdx > 0 && currentTeamModeName !== 'engineer') {
+                const roles = ['auto', 'planner', 'coder', 'system&web agent'];
+                const engineerIdx = roles.indexOf('coder') + 1;
+                if (engineerIdx > 0 && currentTeamModeName !== 'coder') {
                   state.teamModeIndex = engineerIdx;
                   await saveTeamModeSettings(engineerIdx, state.isTeamModeEnabled);
-                  currentTeamModeName = 'engineer';
+                  currentTeamModeName = 'coder';
                 }
 
                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -953,7 +953,7 @@ export async function startChatLoop() {
 
           const roleModel = delegatedRole ? (state.modelRoles[delegatedRole] || state.currentModel) : (state.modelRoles[currentTeamModeName]);
           const webSearchModel = state.modelRoles && state.modelRoles['web_search'];
-          const systemModel = state.modelRoles && state.modelRoles['operator'];
+          const systemModel = state.modelRoles && state.modelRoles['system&web agent'];
           const effectiveModel = roleModel || state.currentModel;
           const aiClient = getClientForModel(effectiveModel);
 
@@ -1235,7 +1235,7 @@ export async function startChatLoop() {
                   });
 
                   if (action === 'proceed') {
-                    state.teamModeIndex = 3; // Switch to Engineer mode automatically
+                    state.teamModeIndex = 3; // Switch to Coder mode automatically
                     state.globalTaskQueue.push("Plan approved. Proceed with building.");
                     turnIsActive = false;
                   } else if (action === 'cancel') {

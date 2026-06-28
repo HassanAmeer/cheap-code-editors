@@ -10,7 +10,7 @@ import { getRagContext } from '../db.mjs';
 import { PROJECTS_DIR } from '../../tools/file-system.mjs';
 
 /**
- * Runs a task through the Architect -> Engineer pipeline.
+ * Runs a task through the Planner -> Coder pipeline.
  * @param {string} task - The initial user task
  * @param {object} globalState - The CLI state object containing currentModel, modelTokenUsage, etc.
  * @param {object} uiCtx - UI contexts passed from loop.mjs
@@ -18,39 +18,39 @@ import { PROJECTS_DIR } from '../../tools/file-system.mjs';
 export async function runTeamPipeline(task, globalState, uiCtx) {
   const { currentModel } = globalState;
   
-  console.log(theme.info(`\n🚀 Initializing Team Pipeline: Engineer & Self-Review Agents for: "${task}"\n`));
+  console.log(theme.info(`\n🚀 Initializing Team Pipeline: Coder & Self-Review Agents for: "${task}"\n`));
 
-  // 1. Setup Engineer AI Memory
+  // 1. Setup Coder AI Memory
   let devTaskContent = task;
   try {
     const prefetchData = await getRagContext(task, PROJECTS_DIR);
     if (prefetchData) {
       devTaskContent += `\n\n[SYSTEM AUTO-PREFETCH]\nBased on your query, here is some automatically retrieved context that might help:\n${prefetchData}\n[/SYSTEM AUTO-PREFETCH]`;
-      console.log(theme.dim(`✔ Pre-fetched Memory & CodeGraph context injected into Engineer AI.`));
+      console.log(theme.dim(`✔ Pre-fetched Memory & CodeGraph context injected into Coder AI.`));
     }
   } catch (e) {}
 
   const devMemory = [
-    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the Engineer AI. Your job is to implement the user's task using the available tools. You build, fix, and review code." },
+    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the Coder AI. Your job is to implement the user's task using the available tools. You build, fix, and review code." },
     { role: "user", content: devTaskContent }
   ];
 
   // 2. Setup Self-Review AI Memory
   const qaMemory = [
-    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the QA Self-Review AI. Your job is to review the code changes made by the Engineer AI. If you find bugs, you can fix them using tools or provide feedback. If everything is perfect, output exactly 'TASK_PASSED'." },
-    { role: "user", content: `The Engineer AI has been assigned this task:\n"${task}"\nReview their implementation once they are done.` }
+    { role: "system", content: await buildSystemPrompt(globalState.isAutoPromptEnabled) + "\n\nYou are the QA Self-Review AI. Your job is to review the code changes made by the Coder AI. If you find bugs, you can fix them using tools or provide feedback. If everything is perfect, output exactly 'TASK_PASSED'." },
+    { role: "user", content: `The Coder AI has been assigned this task:\n"${task}"\nReview their implementation once they are done.` }
   ];
 
   const aiClient = getClientForModel(currentModel);
 
-  // --- Phase 1: Engineer Execution ---
-  console.log(theme.info(`\n🛠️ Engineer AI is now implementing the task...\n`));
+  // --- Phase 1: Coder Execution ---
+  console.log(theme.info(`\n🛠️ Coder AI is now implementing the task...\n`));
   let devIsDone = false;
   let devLoops = 0;
   
   while (!devIsDone && devLoops < 20) {
     devLoops++;
-    const spinner = ora({ text: theme.dim('Developer AI is thinking...'), color: false }).start();
+    const spinner = ora({ text: theme.dim('Coder AI is thinking...'), color: false }).start();
     
     try {
       const response = await aiClient.chat.completions.create({

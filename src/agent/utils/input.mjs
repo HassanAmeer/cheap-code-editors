@@ -427,9 +427,9 @@ export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarT
         renderLineSync();
 
         import('../../providers_models/index.mjs').then(async ({ getClientForModel }) => {
-          const aiClient = getClientForModel((state.modelRoles && state.modelRoles['manager_agent']) || state.currentModel);
-          const TEAM_MODE_NAMES = ['watcher', 'architect', 'engineer', 'operator'];
-          const activeRole = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'watcher';
+          const aiClient = getClientForModel((state.modelRoles && state.modelRoles['adviser AI']) || state.currentModel);
+          const TEAM_MODE_NAMES = ['auto', 'planner', 'coder', 'system&web agent'];
+          const activeRole = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
 
           if (state.isManagerAgentEnabled) {
             const { runManagerCharm } = await import('../core/manager_agent.mjs');

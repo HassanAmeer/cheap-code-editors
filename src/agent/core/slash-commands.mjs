@@ -233,7 +233,7 @@ export async function executeSlashCommand(cmdInput, ctx) {
       const groups = getModelsGroupedByProvider();
 
       const modeNames = [
-        'watcher', 'architect', 'engineer', 'operator'
+        'auto', 'planner', 'coder', 'system&web agent'
       ];
 
       let targetRole = null;
@@ -274,11 +274,11 @@ export async function executeSlashCommand(cmdInput, ctx) {
     if (lowerCmd === '/model_roles') {
       const { saveModelRoles } = await import('../history.mjs');
       const roles = [
-        { key: 'manager_agent', label: 'Manager Agent (Orchestrator)', icon: '🧠' },
-        { key: 'watcher', label: 'Watcher (Master Coordinator)', icon: '👁️' },
-        { key: 'architect', label: 'Architect (Planner + Researcher)', icon: '📐' },
-        { key: 'engineer', label: 'Engineer (Builder + Fixer + Reviewer)', icon: '🛠️' },
-        { key: 'operator', label: 'Operator (System + Web Agent)', icon: '⚙️' },
+        { key: 'adviser AI', label: 'Adviser AI (Hidden Brain)', icon: '🧠' },
+        { key: 'auto', label: 'Auto', icon: '🤖' },
+        { key: 'planner', label: 'Planner', icon: '📋' },
+        { key: 'coder', label: 'Coder', icon: '💻' },
+        { key: 'system&web agent', label: 'System & Web Agent', icon: '⚙️' },
       ];
 
       // Current saved roless
@@ -841,7 +841,7 @@ Instructions for you (The Architect):
     await saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled);
     if (state.isTeamModeEnabled) {
       console.log(theme.success(`✔ Multi-Agent Team Mode: ON 👥`));
-      console.log(theme.dim(`All upcoming tasks will be processed by the Architect -> Engineer pipeline.\n`));
+      console.log(theme.dim(`All upcoming tasks will be processed by the Planner -> Coder pipeline.\n`));
     } else {
       console.log(theme.success(`✔ Multi-Agent Team Mode: OFF 👤`));
       console.log(theme.dim(`Reverted to standard fast-chat mode.\n`));
