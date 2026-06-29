@@ -1,6 +1,6 @@
 {
   "currentModel": "deepseek-v4-flash-free",
-  "autoPermissionMode": "sensitive",
+  "autoPermissionMode": "full",
   "isAutoPromptEnabled": false,
   "voiceProvider": "speechmatics",
   "userKeys": {
@@ -72,10 +72,11 @@
     "watcher": "big-pickle",
     "architect": "deepseek-v4-flash-free",
     "engineer": "deepseek-v4-flash-free",
-    "operator": "deepseek-v4-flash-free"
+    "operator": "deepseek-v4-flash-free",
+    "coder": "big-pickle"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 1,
+  "teamModeIndex": 3,
   "isTeamModeEnabled": false,
   "voiceLanguage": "auto"
 }

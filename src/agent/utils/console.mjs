@@ -6,6 +6,7 @@ import chalk from "chalk";
 import { theme } from "../../ui/theme.mjs";
 import fs from "fs";
 import path from "path";
+import { debugRender } from "./render-debug.mjs";
 
 let debugLogStream = null;
 // Ye environment variable check is liye hai taake debug logs sirf us waqt banain 
@@ -175,6 +176,12 @@ export function setupConsoleMonkeyPatches() {
 
   const originalLog = console.log;
   console.log = function (...args) {
+    debugRender('CONSOLE.LOG', 'Called', { 
+      hasHooks: !!(spinnerClearHook && spinnerRenderHook),
+      hookInProgress: _hookInProgress,
+      argsPreview: args.map(a => typeof a === 'string' ? a.substring(0, 100) : typeof a).join(' ')
+    });
+    
     if (!TerminalState.ignoreWriteNewlines) {
       const str = formatConsoleArgs(args);
       if (str) {
@@ -188,6 +195,7 @@ export function setupConsoleMonkeyPatches() {
     }
 
     if (spinnerClearHook && spinnerRenderHook && !_hookInProgress) {
+      debugRender('CONSOLE.LOG', 'Using hooks', null);
       _hookInProgress = true;
       spinnerClearHook();
       const ret = originalLog.apply(console, args);

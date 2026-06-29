@@ -13,7 +13,7 @@ export async function saveChatHistory(chatId, messages, currentModel = 'bigpickl
     try {
         let finalMessages = messages;
         if (messages.length > 20) {
-            console.log(`\n\x1b[2mThis session has a large history (${messages.length} messages). Summarizing oldest messages to save context in background...\x1b[0m`);
+            writeDebugLog('HISTORY_SUMMARIZATION_START', `This session has a large history (${messages.length} messages). Summarizing oldest messages to save context in background...`);
             try {
                 const aiClient = getClientForModel(currentModel);
                 const messagesToSummarize = messages.slice(1, messages.length - 10);
@@ -33,8 +33,7 @@ export async function saveChatHistory(chatId, messages, currentModel = 'bigpickl
                         ...messages.slice(messages.length - 10)
                     ];
                     await updateChatState(chatId, { messages: newMessages });
-                    console.log(`\x1b[32m✔ Summarized history successfully in background!\x1b[0m`);
-                    console.log(`\n\n\n`);
+                    writeDebugLog('HISTORY_SUMMARIZATION_SUCCESS', 'Summarized history successfully in background!');
                 }).catch(() => { });
             } catch (err) { }
         }

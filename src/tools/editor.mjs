@@ -59,7 +59,7 @@ async function pushUndoSnapshot(filePath, currentContent, type) {
   if (stack.length > 500) {
     stack.splice(0, stack.length - 500);
   }
-  
+
   await writeUndoStack(stack);
 }
 
@@ -83,7 +83,7 @@ async function popUndoSnapshot(filePath) {
   if (idx === -1) return null;
 
   const entry = stack[idx];
-  
+
   // Remove it from the stack
   stack.splice(idx, 1);
   await writeUndoStack(stack);
@@ -100,10 +100,12 @@ function printColorfulDiff(filename, oldContent, newContent) {
   const patchSplit = patch.split('\n');
   const patchLines = patchSplit.length > 4 ? patchSplit.slice(4) : patchSplit;
 
-  console.log(theme.system(`\n--- Changes in ${filename} ---`));
+  const outputLines = [];
+  outputLines.push(theme.system(`\n--- Changes in ${filename} ---`));
 
   if (patchLines.length === 0 || (patchLines.length === 1 && patchLines[0] === "")) {
-    console.log(theme.dim("No changes detected."));
+    outputLines.push(theme.dim("No changes detected."));
+    console.log(outputLines.join('\n'));
     return;
   }
 
@@ -112,27 +114,30 @@ function printColorfulDiff(filename, oldContent, newContent) {
 
   for (const line of patchLines) {
     if (line.startsWith('@@')) {
-      console.log(theme.info(`\n${line}`));
+      outputLines.push(theme.info(`\n${line}`));
       const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
       if (match) {
         oldLineNum = parseInt(match[1], 10);
         newLineNum = parseInt(match[2], 10);
       }
     } else if (line.startsWith('+')) {
-      console.log(chalk.green(`[Line ${newLineNum}] ${line}`));
+      outputLines.push(chalk.green(`[Line ${newLineNum}] ${line}`));
       newLineNum++;
     } else if (line.startsWith('-')) {
-      console.log(chalk.red(`[Line ${oldLineNum}] ${line}`));
+      outputLines.push(chalk.red(`[Line ${oldLineNum}] ${line}`));
       oldLineNum++;
     } else if (line.startsWith('\\')) {
-      console.log(theme.dim(line));
+      outputLines.push(theme.dim(line));
     } else {
-      console.log(theme.dim(`[Line ${newLineNum}] ${line}`));
+      outputLines.push(theme.dim(`[Line ${newLineNum}] ${line}`));
       oldLineNum++;
       newLineNum++;
     }
   }
-  console.log(theme.system(`-------------------------------\n`));
+  outputLines.push(theme.system(`-------------------------------\n`));
+
+  // Single console.log call to avoid racing with render loop
+  console.log(outputLines.join('\n'));
 }
 
 // ============================================================
@@ -151,7 +156,7 @@ export async function editFile(relativePath, newContent, saveSnapshot = true) {
       } catch (err) {
         isCreated = true;
       }
-      
+
       if (saveSnapshot) {
         await pushUndoSnapshot(filePath, oldContent, isCreated ? 'created' : 'edited');
       }
@@ -188,8 +193,8 @@ export async function undoAction(relativePath) {
 
       try {
         if (snap.type === 'created') {
-          try { 
-            await fs.unlink(filePath); 
+          try {
+            await fs.unlink(filePath);
           } catch (e) {
             throw new Error(`Could not delete newly created file. It might be locked by another process: ${e.message}`);
           }

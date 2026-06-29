@@ -93,7 +93,6 @@ export async function executeTool(toolName, args, ctx) {
     const safeCommandStr = args.command.replace(/\\n/g, ' ');
     state.currentSpinnerText = theme.dim(`Executing: ${safeCommandStr}`);
     const res = await raceAbort(runTerminalCommand(args.command, args.cwdRelative, true), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Ran command: ${args.command}`)));
     return res;
   }
   else if (toolName === "create_file") {
@@ -102,16 +101,14 @@ export async function executeTool(toolName, args, ctx) {
     const res = await raceAbort(createFile(args.relativePath, args.content, true), abortController.signal);
     if (isFirstEditThisTurn) {
       state.lastAiEditedFiles.push(args.relativePath);
-      await markFileAsCreated(args.relativePath); // Mark as 'created' for undo
+      await markFileAsCreated(args.relativePath);
     }
-    safeLog(() => console.log(theme.dim(`✔ Created file: ${args.relativePath}`)));
     return res;
   }
 
   else if (toolName === "read_file") {
     state.currentSpinnerText = theme.dim(`Reading file: ${args.relativePath}`);
     const res = await raceAbort(readFile(args.relativePath, args.startLine, args.endLine), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Read file: ${args.relativePath}`)));
     return res;
   }
   else if (toolName === "edit_file") {
@@ -121,7 +118,6 @@ export async function executeTool(toolName, args, ctx) {
       state.lastAiEditedFiles.push(args.relativePath);
     }
     const res = await raceAbort(editFile(args.relativePath, args.newContent, isFirstEditThisTurn), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Edited file: ${args.relativePath}`)));
     return res;
   }
   else if (toolName === "replace_lines_in_file") {
@@ -131,79 +127,66 @@ export async function executeTool(toolName, args, ctx) {
       state.lastAiEditedFiles.push(args.relativePath);
     }
     const res = await raceAbort(replaceLines(args.relativePath, args.startLine, args.endLine, args.newContent, isFirstEditThisTurn), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Replaced lines ${args.startLine}-${args.endLine} in: ${args.relativePath}`)));
     return res;
   }
   else if (toolName === "undo_action") {
     state.currentSpinnerText = theme.dim(`Undoing action: ${args.relativePath}`);
     const res = await raceAbort(undoAction(args.relativePath, true), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Undid changes in: ${args.relativePath}`)));
     return res;
   }
   else if (toolName === "list_directory") {
     state.currentSpinnerText = theme.dim(`Listing directory: ${args.relativePath}`);
     const res = await raceAbort(listDirectory(args.relativePath, true), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Listed directory: ${args.relativePath}`)));
     return res;
   }
   else if (toolName === "search_web") {
     state.currentSpinnerText = theme.dim(`Searching web for: ${args.query}`);
     const res = await raceAbort(searchWebWithFreeSearchAPI(args.query), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Searched web: ${args.query}`)));
     return res;
   }
   else if (toolName === "fetch_website") {
     state.currentSpinnerText = theme.dim(`Fetching website: ${args.url}`);
     const res = await raceAbort(fetchWebsiteDirectly(args.url), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Fetched website: ${args.url}`)));
     return res;
   }
   else if (toolName === "read_skill") {
     state.currentSpinnerText = theme.dim(`Reading skill: ${args.skillName}`);
     const res = await raceAbort(readSkillContent(args.skillName), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Read skill: ${args.skillName}`)));
     return res;
   }
   else if (toolName === "query_codegraph") {
     state.currentSpinnerText = theme.dim(`Querying CodeGraph: ${args.searchQuery}`);
     const res = await raceAbort(queryCodegraph(args.searchQuery, PROJECTS_DIR), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Queried CodeGraph`)));
     return res;
   }
   else if (toolName === "explore_codegraph") {
     state.currentSpinnerText = theme.dim(`Exploring CodeGraph: ${args.exploreQuery}`);
     const res = await raceAbort(exploreCodegraph(args.exploreQuery, PROJECTS_DIR), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Explored CodeGraph`)));
     return res;
   }
   else if (toolName === "view_codegraph_node") {
     state.currentSpinnerText = theme.dim(`Viewing CodeGraph node: ${args.nodeName}`);
     const res = await raceAbort(viewCodegraphNode(args.nodeName, PROJECTS_DIR), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Viewed CodeGraph node`)));
     return res;
   }
   else if (toolName === "init_codegraph") {
     state.currentSpinnerText = theme.dim(`Initializing CodeGraph`);
     const res = await raceAbort(initCodegraph(PROJECTS_DIR), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Initialized CodeGraph`)));
     return res;
   }
   else if (toolName === "impact_codegraph") {
     state.currentSpinnerText = theme.dim(`Running Impact Analysis: ${args.nodeName}`);
     const res = await raceAbort(impactCodegraph(args.nodeName, PROJECTS_DIR), abortController.signal);
-    safeLog(() => console.log(theme.dim(`✔ Completed Impact Analysis`)));
     return res;
   }
   else if (toolName === "update_memory") {
     state.currentSpinnerText = theme.dim(`Updating SQLite Knowledge Base...`);
     addMemoryRecord(args.memory_text);
-    safeLog(() => console.log(theme.success(`✔ Memory added to SQLite FTS5: ${args.memory_text}`)));
     return "Memory successfully added to the persistent knowledge base.";
   }
   else if (toolName === "search_memory") {
     state.currentSpinnerText = theme.dim(`Searching memory for: ${args.query}`);
     const records = searchMemory(args.query);
-    safeLog(() => console.log(theme.dim(`✔ Searched memory for: ${args.query}`)));
     if (records.length === 0) return "No relevant memory records found.";
     return records.map((r, i) => `Result ${i + 1} (Rank ${Math.round(r.rank * 100) / 100}): ${r.content}`).join('\n\n');
   }

@@ -31,6 +31,7 @@ import { askInputWithSlashCatch } from './utils/input.mjs';
 import { executeTool } from './core/tool-executor.mjs';
 import { executeSlashCommand } from './core/slash-commands.mjs';
 import { writeDebugLog } from './utils/logger.mjs';
+import { debugRender } from './utils/render-debug.mjs';
 
 // Auto-Healer and UI imports
 import { startAutoHealer } from './auto-healer.mjs';
@@ -227,7 +228,7 @@ export async function startChatLoop() {
   const getStickyBottomText = (animIdx) => {
     const cols = process.stdout.columns || 80;
     const inputBgColor = theme.customMessageBgHex || '#1e1e1e';
-    const maxContentWidth = Math.max(1, cols - 3);
+    const maxContentWidth = Math.max(1, cols - 4);
 
     const draftText = state.preInputBuffer || '';
 
@@ -272,7 +273,7 @@ export async function startChatLoop() {
 
     const displayStr = rowsToRender.join('\n') + '\n' + borderLine;
     const statusLine = getStatusBar();
-    return `\n\n\n\n${displayStr}\n${statusLine}`;
+    return `\n\n${displayStr}\n${statusLine}`;
   };
 
   // ── Main Interaction Loop ──
@@ -399,7 +400,7 @@ export async function startChatLoop() {
         const borderChar = theme.accent ? theme.accent(borderFrames[_webSpinIdx % borderFrames.length]) : chalk.gray(borderFrames[_webSpinIdx % borderFrames.length]);
         const spinnerChar = _webFrames[_webSpinIdx % _webFrames.length];
         const outStr = `${borderChar} ${spinnerChar} ${state.currentSpinnerText || theme.dim('Searching the web...')}${getStickyBottomText(_webSpinIdx)}`;
-        const lines = outStr.split('\n').length;
+        const lines = countPhysicalLineFeeds(outStr) + 1;
         if (_webFirstRender) {
           _webFirstRender = false;
           process.stdout.write('\n'.repeat(lines) + `\x1b[${lines}A`);
@@ -476,7 +477,7 @@ export async function startChatLoop() {
         const borderChar = theme.accent ? theme.accent(borderFrames[_browseSpinIdx % borderFrames.length]) : chalk.gray(borderFrames[_browseSpinIdx % borderFrames.length]);
         const spinnerChar = _browseFrames[_browseSpinIdx % _browseFrames.length];
         const outStr = `${borderChar} ${spinnerChar} ${state.currentSpinnerText || theme.dim('Running Web Agent...')}${getStickyBottomText(_browseSpinIdx)}`;
-        const lines = outStr.split('\n').length;
+        const lines = countPhysicalLineFeeds(outStr) + 1;
         if (_browseFirstRender) {
           _browseFirstRender = false;
           process.stdout.write('\n'.repeat(lines) + `\x1b[${lines}A`);
@@ -617,6 +618,8 @@ export async function startChatLoop() {
 
       const erasePreviousLines = () => {
         if (previousLines === 0) return;
+        debugRender('SPINNER', 'Erasing previous lines', { count: previousLines });
+        readline.cursorTo(process.stdout, 0);
         let seq = '';
         for (let i = 0; i < previousLines; i++) {
           seq += '\x1b[2K';
@@ -629,6 +632,7 @@ export async function startChatLoop() {
 
       const renderSpinner = () => {
         if (!isSpinning) return;
+        debugRender('SPINNER', 'Rendering frame', { frameIdx: spinnerFrameIdx, text: state.currentSpinnerText });
         const baseText = state.currentSpinnerText || theme.dim('Thinking...');
         let queueText = '';
         if (state.globalTaskQueue.length > 0) {
@@ -640,8 +644,9 @@ export async function startChatLoop() {
         const spinnerChar = spinnerFrames[spinnerFrameIdx % spinnerFrames.length];
         const outStr = `${borderChar} ${spinnerChar} ${baseText}${queueText}${getStickyBottomText(spinnerFrameIdx)}`;
 
-        const lines = outStr.split('\n').length;
+        const lines = countPhysicalLineFeeds(outStr) + 1;
         if (firstRender) {
+          debugRender('SPINNER', 'First render - reserving space', { lines });
           firstRender = false;
           process.stdout.write('\n'.repeat(lines) + `\x1b[${lines}A`);
         } else {
@@ -664,8 +669,16 @@ export async function startChatLoop() {
         start: () => {
           isSpinning = true;
           setConsoleSpinnerHooks(
-            () => { if (isSpinning) erasePreviousLines(); },
-            () => { if (isSpinning) renderSpinner(); }
+            () => {
+              if (isSpinning && previousLines > 0) {
+                erasePreviousLines();
+              }
+            },
+            () => {
+              if (isSpinning) {
+                renderSpinner();
+              }
+            }
           );
           renderSpinner();
           return spinner;
@@ -673,29 +686,40 @@ export async function startChatLoop() {
         stop: () => {
           isSpinning = false;
           setConsoleSpinnerHooks(null, null);
-          erasePreviousLines();
+          if (previousLines > 0) {
+            erasePreviousLines();
+          }
           return spinner;
         },
         clear: () => {
-          erasePreviousLines();
+          if (previousLines > 0) {
+            erasePreviousLines();
+          }
           return spinner;
         },
         fail: (msg) => {
           isSpinning = false;
           setConsoleSpinnerHooks(null, null);
-          erasePreviousLines();
+          if (previousLines > 0) {
+            erasePreviousLines();
+          }
           if (msg) console.log(msg);
           return spinner;
         },
         succeed: (msg) => {
           isSpinning = false;
           setConsoleSpinnerHooks(null, null);
-          erasePreviousLines();
+          if (previousLines > 0) {
+            erasePreviousLines();
+          }
           if (msg) console.log(msg);
           return spinner;
         },
         get text() { return state.currentSpinnerText; },
-        set text(val) { state.currentSpinnerText = val; renderSpinner(); }
+        set text(val) {
+          state.currentSpinnerText = val;
+          if (isSpinning) renderSpinner();
+        }
       };
 
       const safeLogMsg = (msg) => {
@@ -924,7 +948,7 @@ export async function startChatLoop() {
                 const { select, input } = await import('@inquirer/prompts');
                 const choices = managerDecision.options.map(opt => ({ name: opt, value: opt }));
                 choices.push({ name: 'Write Custom Message...', value: '__custom__' });
-                
+
                 let answer = await select({
                   message: 'Select an option:',
                   choices
@@ -937,11 +961,11 @@ export async function startChatLoop() {
                 if (process.stdin.isTTY) process.stdin.setRawMode(true);
                 process.stdin.on("keypress", preInputCollector);
                 spinner.start();
-                
+
                 if (answer) {
                   userPrintText = answer;
                   hasManagerRunThisTurn = false;
-                  continue; 
+                  continue;
                 }
               }
 
@@ -980,8 +1004,6 @@ export async function startChatLoop() {
             readline.cursorTo(process.stdout, 0);
             readline.clearScreenDown(process.stdout);
 
-            readline.moveCursor(process.stdout, 0, -1);
-
             const lastLine = previousLines.length > 0 ? previousLines[previousLines.length - 1] : "";
             const lastLineWidth = stripAnsiLocal(lastLine).length % (process.stdout.columns || 80);
             if (lastLineWidth > 0) {
@@ -1006,9 +1028,12 @@ export async function startChatLoop() {
                 rendered = rendered.replace(/<thought>[\s\S]*?<\/thought>/g, '');
               }
 
-              rendered = marked(rendered);
+              // Only apply markdown rendering after streaming is complete to avoid mid-stream flicker
+              if (!isStreaming) {
+                rendered = marked(rendered);
+              }
 
-              if (!state.isThinkingHidden) {
+              if (!state.isThinkingHidden && !isStreaming) {
                 rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
                 rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
                 rendered = rendered.replace(/<thought>/g, '\x1b[90m');
@@ -1057,7 +1082,7 @@ export async function startChatLoop() {
             const sChar = theme.info ? theme.info(sFrames[streamAnimIdx % sFrames.length]) : chalk.cyan(sFrames[streamAnimIdx % sFrames.length]);
 
             const stickyText = `\n\n${bChar} ${sChar} ${baseText}` + getStickyBottomText(streamAnimIdx);
-            stickyLinesCount = countPhysicalLineFeeds(stickyText);
+            stickyLinesCount = countPhysicalLineFeeds(stickyText) + 1;
             process.stdout.write(stickyText);
           };
 
@@ -1180,13 +1205,27 @@ export async function startChatLoop() {
                 continue;
               }
 
-              state.currentSpinnerText = theme.dim(`Using tool: ${toolName}...`);
-
               const toolCtx = {
                 spinner,
                 abortController,
                 state,
-                safeLog: (fn) => { spinner.clear(); spinner.stop(); fn(); spinner.start(); },
+                safeLog: (fn) => {
+                  // CRITICAL: Fully stop spinner before any console output
+                  const wasSpinning = isSpinning;
+                  if (wasSpinning) {
+                    isSpinning = false;
+                    setConsoleSpinnerHooks(null, null);
+                    clearInterval(spinnerInterval);
+                    if (previousLines > 0) {
+                      erasePreviousLines();
+                    }
+                  }
+
+                  // Now safe to log
+                  fn();
+
+                  // DO NOT restart spinner - let tool execution continue naturally
+                },
                 preInputCollector
               };
 
