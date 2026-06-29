@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
+import TextInput from 'ink-text-input';
 
-export default function SearchPrompt({ message, choices, onSelect, onCancel, query }) {
+export default function SearchPrompt({ message, choices, onSelect, onCancel }) {
+  const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
 
   // Filter choices based on query text
@@ -45,11 +47,16 @@ export default function SearchPrompt({ message, choices, onSelect, onCancel, que
   return (
     <Box flexDirection="column" paddingY={1}>
       <Text color="cyan" bold>? {message}</Text>
-      <Box flexDirection="row" marginY={0}>
-        <Text color="cyan">Search query: </Text>
-        <Text color="white" bold>/{query}</Text>
+      <Box flexDirection="row" marginY={1}>
+        <Text color="cyan">Search: </Text>
+        <TextInput 
+          value={query} 
+          onChange={(val) => {
+            setQuery(val);
+          }}
+        />
       </Box>
-      <Box flexDirection="column" marginLeft={2} marginTop={1}>
+      <Box flexDirection="column" marginLeft={2}>
         {start > 0 && (
           <Text color="gray">  ▲ ... ({start} more above)</Text>
         )}

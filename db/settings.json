@@ -78,7 +78,7 @@
     "system&web agent": "north-mini-code-free"
   },
   "tokenUsageLimit": 0,
-  "teamModeIndex": 3,
+  "teamModeIndex": 1,
   "isTeamModeEnabled": false,
   "voiceLanguage": "auto"
 }

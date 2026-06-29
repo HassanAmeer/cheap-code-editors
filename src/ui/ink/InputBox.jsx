@@ -1,25 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from './TextInput.jsx';
 import Spinner from 'ink-spinner';
 import cliSpinners from 'cli-spinners';
 import Gradient from 'ink-gradient';
 import { uiBridge } from './utils.mjs';
+import { theme } from '../../ui/theme.mjs';
 
-export const InputBox = ({ onSubmit, placeholder, isThinking, activeSpinnerText, isVoiceOn, hasActiveMenu, isSearchActive }) => {
+export const InputBox = ({ onSubmit, placeholder, isThinking, activeSpinnerText, isVoiceOn, hasActiveMenu, isSearchActive, focus }) => {
   const [input, setInput] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isCharming, setIsCharming] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
-
-  // Clear input when search menu transitions to inactive
-  useEffect(() => {
-    if (!isSearchActive) {
-      setInput('');
-    }
-  }, [isSearchActive]);
 
   const handleVoiceSubmit = async () => {
     // 1. Turn off voice in loops state
@@ -126,9 +120,6 @@ export const InputBox = ({ onSubmit, placeholder, isThinking, activeSpinnerText,
     }
   };
 
-  const borderColor = isThinking ? 'yellow' : 'cyan';
-  const promptCharColor = isThinking ? 'yellow' : 'cyan';
-
   return (
     <Box flexDirection="column">
       {isVoiceOn && (
@@ -150,51 +141,66 @@ export const InputBox = ({ onSubmit, placeholder, isThinking, activeSpinnerText,
           </Gradient>
         </Box>
       )}
-      <Box borderStyle="single" borderColor={borderColor} paddingX={1} marginY={0}>
-        <Text color={promptCharColor} bold>{isThinking ? '⏳' : '❯'} </Text>
-        <Box flexGrow={1} marginLeft={1}>
-          <TextInput
-            value={input}
-            onChange={(val) => {
-              if (val === '/') {
-                onSubmit('/');
-                setInput('');
-              } else {
-                setInput(val);
-                if (isSearchActive) {
-                  uiBridge.updateState({ searchQuery: val });
-                }
-              }
-            }}
-            onSubmit={(value) => {
-              if (isVoiceOn) {
-                handleVoiceSubmit();
-              } else {
-                if (value.trim()) {
-                  if (isThinking) {
-                    if (uiBridge.loopState) {
-                      uiBridge.loopState.globalTaskQueue.push(value);
-                      uiBridge.rerender();
-                    }
-                  } else {
-                    // Add to session history
-                    setHistory((prev) => [...prev, value]);
-                    setHistoryIndex(-1);
-                    setTempInput('');
-
-                    onSubmit(value);
-                  }
+      <Box flexDirection="row" marginY={0} paddingX={0}>
+        {/* Left indicators side column */}
+        <Box flexDirection="column">
+          <Text>{theme.accent('▌')}</Text>
+          <Text>{theme.accent('▌')}</Text>
+          <Text>{theme.accent('▌')}</Text>
+        </Box>
+        {/* Right input field card */}
+        <Box
+          flexGrow={1}
+          marginLeft={1}
+          backgroundColor="#2b2b2b"
+          paddingX={1}
+          minHeight={3}
+          flexDirection="column"
+        >
+          <Box flexGrow={1}>
+            <TextInput
+              value={input}
+              onChange={(val) => {
+                if (val === '/') {
+                  onSubmit('/');
                   setInput('');
+                } else {
+                  setInput(val);
                 }
-              }
-            }}
-            onHistoryUp={handleHistoryUp}
-            onHistoryDown={handleHistoryDown}
-            onCharm={handleCharm}
-            hasActiveMenu={hasActiveMenu}
-            isSearchActive={isSearchActive}
-            placeholder={placeholder || 'Write Your Task...'}
-          />
+              }}
+              onSubmit={(value) => {
+                if (isVoiceOn) {
+                  handleVoiceSubmit();
+                } else {
+                  if (value.trim()) {
+                    if (isThinking) {
+                      if (uiBridge.loopState) {
+                        uiBridge.loopState.globalTaskQueue.push(value);
+                        uiBridge.rerender();
+                      }
+                    } else {
+                      // Add to session history
+                      setHistory((prev) => [...prev, value]);
+                      setHistoryIndex(-1);
+                      setTempInput('');
+
+                      onSubmit(value);
+                    }
+                    setInput('');
+                  }
+                }
+              }}
+              onHistoryUp={handleHistoryUp}
+              onHistoryDown={handleHistoryDown}
+              onCharm={handleCharm}
+              hasActiveMenu={hasActiveMenu}
+              isSearchActive={isSearchActive}
+              focus={focus}
+              placeholder={placeholder || 'ask anything or type / for commands'}
+            />
+          </Box>
+          <Text> </Text>
+          <Text> </Text>
         </Box>
       </Box>
     </Box>

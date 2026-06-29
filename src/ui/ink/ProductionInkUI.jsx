@@ -13,6 +13,7 @@ import ConfirmPrompt from './ConfirmPrompt.jsx';
 import InputPrompt from './InputPrompt.jsx';
 import SearchPrompt from './SearchPrompt.jsx';
 import { InputBox } from './InputBox.jsx';
+import { theme } from '../../ui/theme.mjs';
 
 // Custom Markdown Code Block Parser
 const parseBlocks = (text) => {
@@ -203,39 +204,44 @@ export const StatusBarComponent = ({ statusBar }) => {
   const voiceColor = statusBar.isVoiceOn ? 'green' : 'gray';
   const voiceIndicator = statusBar.isVoiceOn ? '● on' : '○ off';
 
+  const permLabel = (statusBar.permissions === 'sensitive' || !statusBar.permissions) ? 'default' : statusBar.permissions;
+
   return (
-    <Box borderStyle="single" borderColor="gray" paddingX={1} flexDirection="row" justifyContent="space-between" width="100%">
-      <Box flexDirection="row">
-        <Text color="cyan">{circles} </Text>
-        <Text color="white" bold>{currentModeName} </Text>
-        <Text color="gray">→ shift+tab </Text>
+    <Box flexDirection="column" width="100%">
+      <Text color="#2b2b2b">{"⏥".repeat(process.stdout.columns || 80)}</Text>
+      <Box paddingX={1} flexDirection="row" justifyContent="space-between" width="100%">
+        <Box flexDirection="row">
+          <Text>{theme.accent(circles)} </Text>
+          <Text color="white" bold>{currentModeName} </Text>
+          <Text color="gray">→ shift+tab </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="magenta" bold>{activeModel} </Text>
+          <Text color="gray"> · </Text>
+          <Text bold>{theme.accent(activeModel)} </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="green">{'█'.repeat(filled)}</Text>
-        <Text color="gray">{'░'.repeat(BAR_WIDTH - filled)}</Text>
-        <Text color="green"> {pct}% </Text>
-        <Text color="gray">ctx </Text>
+          <Text color="gray"> · </Text>
+          <Text color="green">{'█'.repeat(filled)}</Text>
+          <Text color="gray">{'░'.repeat(BAR_WIDTH - filled)}</Text>
+          <Text color="green"> {pct}% </Text>
+          <Text color="gray">ctx </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="gray">permissions: </Text>
-        <Text color={permColor} bold>{statusBar.permissions || 'sensitive'} </Text>
+          <Text color="gray"> · </Text>
+          <Text color="gray">permissions: </Text>
+          <Text color={permColor} bold>{statusBar.permissions || 'sensitive'} </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="gray">voice: </Text>
-        <Text color={voiceColor}>{voiceIndicator} </Text>
-        <Text color="gray">→ shift+v </Text>
+          <Text color="gray"> · </Text>
+          <Text color="gray">voice: </Text>
+          <Text color={voiceColor}>{voiceIndicator} </Text>
+          <Text color="gray">→ shift+v </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="gray">charm: → shift+c </Text>
+          <Text color="gray"> · </Text>
+          <Text color="gray">charm: → shift+c </Text>
 
-        <Text color="gray"> · </Text>
-        <Text color="gray">Ctrl+O toggle collapse</Text>
-      </Box>
-      <Box>
-        <Text color="gray">/ for commands</Text>
+          <Text color="gray"> · </Text>
+          <Text color="gray">Ctrl+O toggle collapse</Text>
+        </Box>
+        <Box>
+          <Text color="gray">/ for commands</Text>
+        </Box>
       </Box>
     </Box>
   );
@@ -330,13 +336,12 @@ export const InkChatApp = () => {
   return (
     <Box flexDirection="column" height="100%">
       {/* Main content area */}
-      <Box flexGrow={1} flexDirection="column" paddingY={1}>
-        <ChatView
-          messages={messages}
-          isStreaming={isThinking}
-          currentContent={streamingText}
-          collapseCode={collapseCode}
-        />
+      <Box flexDirection="column" paddingY={0}>
+        {streamingText && (
+          <Box borderStyle="round" borderColor="gray" paddingX={1} marginY={1}>
+            <Text color="white">{streamingText}</Text>
+          </Box>
+        )}
         <ToolDisplay currentTool={activeTool} />
       </Box>
 
@@ -400,23 +405,39 @@ export const InkChatApp = () => {
               <Text color="yellow" bold> {currentSpinnerText}</Text>
             </Box>
           )}
-          {uiBridge.loopState?.globalTaskQueue?.length > 0 && (
+          {uiBridge.loopState?.sessionTasks?.length > 1 && (
             <Box flexDirection="column" paddingX={1} marginY={0}>
-              <Text color="cyan" bold>⏳ Queued: {uiBridge.loopState.globalTaskQueue.length} message(s) in queue ({collapseQueue ? 'Ctrl+Q to view' : 'Ctrl+Q to hide'})</Text>
+              <Text color="cyan" bold>
+                ⏳ Tasks: {uiBridge.loopState.sessionTasks.filter(t => t.status === 'completed').length}/{uiBridge.loopState.sessionTasks.length} completed ({collapseQueue ? 'Ctrl+Q to view' : 'Ctrl+Q to hide'})
+              </Text>
               {!collapseQueue && (
                 <Box flexDirection="column" marginLeft={2}>
-                  {uiBridge.loopState.globalTaskQueue.map((task, idx) => (
-                    <Text key={idx} color="gray">
-                      <Text color="cyan" bold> [{idx + 1}]</Text> {task}
-                    </Text>
-                  ))}
+                  {uiBridge.loopState.sessionTasks.map((task, idx) => {
+                    const isCompleted = task.status === 'completed';
+                    const isRunning = task.status === 'running';
+                    return (
+                      <Box key={idx} flexDirection="row">
+                        <Text color={isCompleted ? 'green' : isRunning ? 'yellow' : 'cyan'} bold>
+                          {isCompleted ? '  [✓] ' : isRunning ? '  [▶] ' : '  [ ] '}
+                        </Text>
+                        <Text
+                          color={isCompleted ? 'gray' : isRunning ? 'yellow' : 'white'}
+                          underline={isCompleted}
+                          bold={isRunning}
+                        >
+                          {task.text}
+                        </Text>
+                      </Box>
+                    );
+                  })}
                 </Box>
               )}
             </Box>
           )}
           {activeTip && !isThinking && (
-            <Box paddingX={1} marginY={0}>
-              <Text color="gray">ⓘ Tip: {activeTip}</Text>
+            <Box flexDirection="column" marginY={0} paddingX={0}>
+              <Text color="gray">⎡ ⓘ Tip: {activeTip}</Text>
+              <Text color="gray">⎜</Text>
             </Box>
           )}
           <InputBox
@@ -429,6 +450,7 @@ export const InkChatApp = () => {
             isVoiceOn={statusBar.isVoiceOn}
             hasActiveMenu={!!pendingConfirmation || !!pendingMenu}
             isSearchActive={pendingMenu && pendingMenu.type === 'search'}
+            focus={!(pendingMenu && pendingMenu.type === 'search')}
           />
         </Box>
       </Box>

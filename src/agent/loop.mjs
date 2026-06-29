@@ -74,6 +74,7 @@ export async function startChatLoop() {
     isTeamModeEnabled: teamSettings.isTeamModeEnabled,
     isAutoContinueEnabled: false,
     globalTaskQueue: [],
+    sessionTasks: [],
     isMenuOpen: false,
     currentSpinnerText: '',
     inputPromptHistory: TerminalState.inputPromptHistory,
@@ -331,10 +332,25 @@ export async function startChatLoop() {
       query = state.globalTaskQueue.shift();
       console.log(`❯ ${query}`);
       console.log(`[Auto-Processing Next Task from Queue...]`);
+      if (state.sessionTasks) {
+        const task = state.sessionTasks.find(t => t.text === query && t.status === 'queued');
+        if (task) task.status = 'running';
+        uiBridge.rerender();
+      }
     } else {
+      if (state.sessionTasks && state.sessionTasks.length > 0) {
+        state.sessionTasks = [];
+        uiBridge.rerender();
+      }
       const activeTip = getNextTip();
       uiBridge.updateState({ activeTip });
       query = await uiBridge.awaitInput("Write Your Task...");
+      if (query) {
+        if (state.sessionTasks) {
+          state.sessionTasks.push({ text: query, status: 'running' });
+          uiBridge.rerender();
+        }
+      }
     }
 
     if (!query) continue;
@@ -795,6 +811,7 @@ export async function startChatLoop() {
               }
 
               uiBridge.updateState({ isThinking: false, streamingText: '' });
+              console.log(`\n${managerDecision.instruction}\n`);
               state.messages.push({ role: 'assistant', content: managerDecision.instruction });
               uiBridge.rerender();
               
@@ -933,6 +950,9 @@ export async function startChatLoop() {
 
           isStreaming = false;
           uiBridge.updateState({ isThinking: false, streamingText: '' });
+          if (responseMessage.content) {
+            console.log(`\n${responseMessage.content}\n`);
+          }
 
           writeDebugLog("App: Agent AI Response Generated", {
             contentLength: responseMessage.content?.length,
@@ -1153,6 +1173,13 @@ export async function startChatLoop() {
         uiBridge.updateState({ isThinking: false });
         isThinking = false;
         currentAbortController = null;
+        if (state.sessionTasks) {
+          const task = state.sessionTasks.find(t => t.status === 'running');
+          if (task) {
+            task.status = 'completed';
+          }
+          uiBridge.rerender();
+        }
       }
     }
   }
