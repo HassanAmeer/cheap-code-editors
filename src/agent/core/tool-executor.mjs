@@ -107,7 +107,15 @@ export async function executeTool(toolName, args, ctx) {
   }
 
   else if (toolName === "read_file") {
-    state.currentSpinnerText = theme.dim(`Reading file: ${args.relativePath}`);
+    let lineInfo = '';
+    if (args.startLine && args.endLine) {
+      lineInfo = ` [ lines ${args.startLine}-${args.endLine} ]`;
+    } else if (args.startLine) {
+      lineInfo = ` [ lines ${args.startLine}-end ]`;
+    } else if (args.endLine) {
+      lineInfo = ` [ lines 1-${args.endLine} ]`;
+    }
+    state.currentSpinnerText = theme.dim(`Reading file: ${args.relativePath}${lineInfo}`);
     const res = await raceAbort(readFile(args.relativePath, args.startLine, args.endLine), abortController.signal);
     return res;
   }

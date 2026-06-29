@@ -59,9 +59,11 @@ ${userQuery}
 
 Return the JSON object now.`;
 
+  const managerModel = state.modelRoles?.['adviser AI'] || state.currentModel;
+
   try {
     const response = await aiClient.chat.completions.create({
-      model: state.currentModel, // The manager's model
+      model: managerModel, // The manager's model
       messages: [
         { role: "system", content: "You are the orchestrator. Always return ONLY raw valid JSON." },
         { role: "user", content: prompt }
@@ -70,8 +72,13 @@ Return the JSON object now.`;
     });
 
     let content = response.choices[0].message.content;
-    // Strip markdown formatting if any
-    content = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+    // Safely extract JSON if wrapped in markdown
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (jsonMatch) {
+      content = jsonMatch[1].trim();
+    } else {
+      content = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+    }
 
     const decision = JSON.parse(content);
     writeDebugLog("Manager: Decision Parsed", decision);
@@ -111,8 +118,10 @@ ${rawText}
 
 Enhanced Prompt:`;
 
+  const managerModel = state.modelRoles?.['adviser AI'] || state.currentModel;
+
   const response = await aiClient.chat.completions.create({
-    model: aiClient.modelName || 'gpt-4o',
+    model: managerModel,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3
   });

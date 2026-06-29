@@ -1,8 +1,8 @@
 {
-  "currentModel": "deepseek-v4-flash-free",
+  "currentModel": "meta-llama/llama-3.3-70b-instruct:free",
   "autoPermissionMode": "full",
   "isAutoPromptEnabled": false,
-  "voiceProvider": "speechmatics",
+  "voiceProvider": "offline",
   "userKeys": {
     "opencode": {
       "apiKey": "sk-9IOCGo4VokNOPA88itOAH2CXJJzlOrAcMtpioK6j5V9C8X7NKL5IsadSfxnC8yEW",
@@ -56,7 +56,7 @@
   "isManagerAgentEnabled": true,
   "modelRoles": {
     "auto": "north-mini-code-free",
-    "planner": "",
+    "planner": "deepseek-v4-flash-free",
     "builder": "big-pickle",
     "fixer": "deepseek-v4-flash-free",
     "reviewer": "deepseek-v4-flash-free",
@@ -73,7 +73,9 @@
     "architect": "deepseek-v4-flash-free",
     "engineer": "deepseek-v4-flash-free",
     "operator": "deepseek-v4-flash-free",
-    "coder": "big-pickle"
+    "coder": "big-pickle",
+    "adviser AI": "north-mini-code-free",
+    "system&web agent": "north-mini-code-free"
   },
   "tokenUsageLimit": 0,
   "teamModeIndex": 3,

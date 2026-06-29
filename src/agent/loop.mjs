@@ -1023,9 +1023,11 @@ export async function startChatLoop() {
               let rendered = responseMessage.content;
 
               if (state.isThinkingHidden) {
-                // Strip thinking blocks entirely
+                // Strip thinking blocks entirely, including unclosed ones during streaming
                 rendered = rendered.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
                 rendered = rendered.replace(/<thought>[\s\S]*?<\/thought>/g, '');
+                rendered = rendered.replace(/<thinking>[\s\S]*$/, '');
+                rendered = rendered.replace(/<thought>[\s\S]*$/, '');
               }
 
               // Only apply markdown rendering after streaming is complete to avoid mid-stream flicker
@@ -1033,7 +1035,7 @@ export async function startChatLoop() {
                 rendered = marked(rendered);
               }
 
-              if (!state.isThinkingHidden && !isStreaming) {
+              if (!state.isThinkingHidden) {
                 rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
                 rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
                 rendered = rendered.replace(/<thought>/g, '\x1b[90m');
@@ -1329,9 +1331,16 @@ export async function startChatLoop() {
           }
 
           if (turnLoopCount >= MAX_TURN_LOOPS) {
-            spinner.fail(theme.error("⚠️ AI is stuck in an infinite loop repeating the same tools."));
+            spinner.fail(theme.error("⚠️ AI is stuck in an infinite loop repeating the same tools. Auto-delegating to System & Web Agent..."));
             state.messages = state.messages.slice(0, prevMessagesLength);
-            safeLogMsg(theme.warning("⚠️ The failing message has been removed from memory to prevent a loop."));
+            state.teamModeIndex = 4; // Switch to System & Web Agent
+            state.messages.push({
+              role: "user",
+              content: "SYSTEM ALERT: The previous agent got stuck in an infinite loop repeating the same tools and was terminated. The failing messages were removed to prevent further loops. Please analyze the situation, store this failure in your memory, and attempt to resolve the user's original issue or notify them of the roadblock."
+            });
+            turnLoopCount = 0;
+            turnIsActive = true;
+            continue;
           }
 
           saveChatHistory(state.chatId, state.messages, state.currentModel);
@@ -1345,7 +1354,7 @@ export async function startChatLoop() {
             state.messages.push({ role: "system", content: "User interrupted the task." });
             turnIsActive = false;
           } else {
-            safeLogMsg(theme.error(`\n❌ AI Error: ${apiErr.message}\n`));
+            safeLogMsg(theme.dim(`\n╳ AI Error: ${apiErr.message}`));
             if (state.isAutoModeEnabled) {
               const validModels = getValidAutoModels();
               if (validModels.length > 1) {

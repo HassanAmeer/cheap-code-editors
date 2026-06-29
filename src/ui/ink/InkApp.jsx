@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import Spinner from 'ink-spinner';
-
+import TextInput from 'ink-text-input';
+import Markdown from 'ink-markdown';
+import Gradient from 'ink-gradient';
 // Main Chat View Component
 export const ChatView = ({ messages, isStreaming, currentContent }) => {
   return (
@@ -17,7 +19,7 @@ export const ChatView = ({ messages, isStreaming, currentContent }) => {
           {msg.role === 'assistant' && (
             <Box flexDirection="column">
               <Box borderStyle="single" borderColor="gray" paddingX={1}>
-                <Text>{msg.content}</Text>
+                <Markdown>{msg.content}</Markdown>
               </Box>
             </Box>
           )}
@@ -100,21 +102,6 @@ export const StatusBar = ({ model, permissions, tokensUsed }) => {
 export const InputBox = ({ onSubmit, disabled }) => {
   const [input, setInput] = useState('');
   
-  useInput((char, key) => {
-    if (disabled) return;
-    
-    if (key.return) {
-      if (input.trim()) {
-        onSubmit(input);
-        setInput('');
-      }
-    } else if (key.backspace || key.delete) {
-      setInput(prev => prev.slice(0, -1));
-    } else if (char && !key.ctrl && !key.meta) {
-      setInput(prev => prev + char);
-    }
-  });
-  
   return (
     <Box 
       borderStyle="single" 
@@ -122,10 +109,23 @@ export const InputBox = ({ onSubmit, disabled }) => {
       paddingX={1}
     >
       <Text color="cyan" bold>❯ </Text>
-      <Text>{input || <Text color="gray">Write Your Task...</Text>}</Text>
-      {disabled && (
-        <Text color="yellow"> (Processing...)</Text>
-      )}
+      <Box flexGrow={1} marginLeft={1}>
+        {disabled ? (
+          <Text color="yellow">Processing...</Text>
+        ) : (
+          <TextInput 
+            value={input} 
+            onChange={setInput}
+            onSubmit={(value) => {
+              if (value.trim()) {
+                onSubmit(value);
+                setInput('');
+              }
+            }}
+            placeholder="Write Your Task..."
+          />
+        )}
+      </Box>
     </Box>
   );
 };
