@@ -1,5 +1,5 @@
-import { select, input } from '@inquirer/prompts';
-import { theme, getPromptTheme } from './theme.mjs';
+import { inkSelect as select, inkInput as input } from './ink/utils.mjs';
+import { theme } from './theme.mjs';
 import { loadUserKeys, saveUserKeys } from '../providers_models/keys.mjs';
 import { clearClientCache } from '../providers_models/index.mjs';
 import { purgeMemory } from '../agent/db.mjs';
@@ -30,8 +30,7 @@ export async function handleConfigPrompt() {
           { name: chalk.gray('🗑 Clear a Provider API Key'), value: 'clear' },
           { name: chalk.gray('␡ Purge Agent SQLite Knowledge Base (FTS5)'), value: 'purge' },
           { name: chalk.gray('✕ Back to Main Menu'), value: 'back' }
-        ],
-        theme: getPromptTheme()
+        ]
       });
 
       if (choice === 'back') {
@@ -44,8 +43,7 @@ export async function handleConfigPrompt() {
           choices: [
             ...PROVIDERS.map(p => ({ name: chalk.gray(p.name), value: p.value })),
             { name: chalk.gray('← Back'), value: 'back' }
-          ],
-          theme: getPromptTheme()
+          ]
         });
 
         if (provider === 'back') {
@@ -120,8 +118,7 @@ export async function handleConfigPrompt() {
           choices: [
             ...activeChoices.map(c => ({ name: chalk.gray(c.name), value: c.value })),
             { name: chalk.gray('✕ Cancel'), value: 'cancel' }
-          ],
-          theme: getPromptTheme()
+          ]
         });
 
         if (providerToClear !== 'cancel') {
@@ -138,8 +135,7 @@ export async function handleConfigPrompt() {
           choices: [
             { name: 'Yes, Purge Memory', value: true },
             { name: 'No, Cancel', value: false }
-          ],
-          theme: getPromptTheme()
+          ]
         });
         if (confirm) {
           try {

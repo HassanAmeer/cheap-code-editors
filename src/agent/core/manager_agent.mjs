@@ -80,6 +80,13 @@ Return the JSON object now.`;
       content = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     }
 
+    // Extract JSON block using outer brace matching
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      content = content.substring(firstBrace, lastBrace + 1);
+    }
+
     const decision = JSON.parse(content);
     writeDebugLog("Manager: Decision Parsed", decision);
     return decision;
@@ -87,7 +94,7 @@ Return the JSON object now.`;
     writeDebugLog("Manager: Error", e, "ERROR");
     return {
       action: "respond",
-      instruction: "Manager Error: Failed to process the orchestration step.",
+      instruction: `Manager Error: Failed to process the orchestration step. Details: ${e.message}`,
       reasoning: "JSON parsing or network error."
     };
   }

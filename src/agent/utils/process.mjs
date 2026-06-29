@@ -6,7 +6,7 @@ import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-import { confirm } from '@inquirer/prompts';
+import { inkConfirm as confirm } from '../../ui/ink/utils.mjs';
 import ora from 'ora';
 import { theme } from '../../ui/theme.mjs';
 import { webAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
@@ -136,7 +136,7 @@ export async function checkAndInstallMissingDependencies(projectsDir) {
       console.log(theme.info(`\n📦 Auto-Dependency Scanner: AI used new packages that are NOT installed in package.json:`));
       console.log(theme.dim(`   ${pkgsToInstall.join(', ')}\n`));
 
-      const proceed = await confirm({ message: 'Do you want to install them automatically?', default: true, theme: getPromptTheme() });
+      const proceed = await confirm({ message: 'Do you want to install them automatically?' });
       if (proceed) {
         const spinner = ora({ text: theme.dim(`Installing ${pkgsToInstall.join(', ')}...`), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
         const installCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';

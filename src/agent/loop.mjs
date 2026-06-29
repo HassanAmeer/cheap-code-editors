@@ -39,8 +39,13 @@ import { historyPrompt } from '../ui/historyPrompt.mjs';
 import { handleConfigPrompt } from '../ui/configPrompt.mjs';
 import { handleSkillsPrompt } from '../ui/skillsPrompt.mjs';
 import { handleThemePrompt } from '../ui/theme.mjs';
+import { startInkUI } from '../ui/ink/ProductionInkUI.jsx';
+import { uiBridge } from '../ui/ink/utils.mjs';
 
 export async function startChatLoop() {
+  startInkUI();
+  uiBridge.state.messages = [];
+
   const teamSettings = await getTeamModeSettings();
   writeDebugLog("App: Start Chat Loop", { teamModeIndex: teamSettings.teamModeIndex, isTeamModeEnabled: teamSettings.isTeamModeEnabled });
 
@@ -52,7 +57,7 @@ export async function startChatLoop() {
     isManagerAgentEnabled: await getManagerAgentSetting(),
     modelRoles: await getModelRoles(),
     tokenUsageLimit: await getTokenUsageLimitSetting(),
-    messages: [],
+    messages: uiBridge.state.messages,
     chatId: 'chat_' + Date.now(),
     shouldAutoContinue: true,
     isAutoModeEnabled: await getAutoModeSetting(),
@@ -75,30 +80,67 @@ export async function startChatLoop() {
     screenPrompts: TerminalState.screenPrompts
   };
 
+  const updateUIStatusBar = () => {
+    uiBridge.updateState({
+      statusBar: {
+        model: state.currentModel,
+        permissions: state.autoPermissionMode,
+        tokensUsed: Object.values(state.modelTokenUsage || {}).reduce((a, b) => a + b, 0),
+        teamModeIndex: state.teamModeIndex,
+        isVoiceOn: state.isVoiceOn,
+        modelRoles: state.modelRoles || {}
+      }
+    });
+  };
+
   state.messages.push({ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) });
+  uiBridge.loopState = state;
+  uiBridge.updateUIStatusBar = updateUIStatusBar;
+  updateUIStatusBar();
 
   let isThinking = false;
   let currentAbortController = null;
   let isInterrupted = false;
+
+  const spinner = {
+    start: () => {
+      uiBridge.updateState({ isThinking: true });
+      return spinner;
+    },
+    stop: () => {
+      uiBridge.updateState({ isThinking: false });
+      return spinner;
+    },
+    clear: () => {
+      uiBridge.updateState({ isThinking: false, currentSpinnerText: '' });
+      return spinner;
+    },
+    fail: (msg) => {
+      uiBridge.updateState({ isThinking: false, currentSpinnerText: '' });
+      if (msg) console.log(msg);
+      return spinner;
+    },
+    succeed: (msg) => {
+      uiBridge.updateState({ isThinking: false, currentSpinnerText: '' });
+      if (msg) console.log(msg);
+      return spinner;
+    },
+    get text() { return uiBridge.state.currentSpinnerText; },
+    set text(val) {
+      uiBridge.updateState({ currentSpinnerText: val });
+    }
+  };
 
   const preInputCollector = (char, key) => {
     if (isThinking && !state.isMenuOpen) {
       if ((key && key.ctrl && key.name === 'c') || (key && key.name === 'escape')) {
         if (state.globalTaskQueue.length > 0) {
           state.globalTaskQueue.pop(); // Cancel last queued task
+          uiBridge.rerender();
         } else if (currentAbortController && !currentAbortController.signal.aborted) {
           isInterrupted = true;
           currentAbortController.abort();
           console.log(theme.warning("\n⚠️  Operation cancelled by user. Stopping current action..."));
-        }
-      } else if (key && (key.name === 'backspace' || key.name === 'delete') || char === '\b' || char === '\x7f') {
-        state.preInputBuffer = state.preInputBuffer.slice(0, -1);
-      } else if (char && char.length === 1 && char >= ' ' && char !== '\x7f') {
-        state.preInputBuffer += char;
-      } else if (key && key.name === 'return') {
-        if (state.preInputBuffer.trim()) {
-          state.globalTaskQueue.push(state.preInputBuffer.trim());
-          state.preInputBuffer = '';
         }
       }
     }
@@ -283,17 +325,16 @@ export async function startChatLoop() {
     }
 
     let query = "";
+    updateUIStatusBar();
 
     if (state.globalTaskQueue.length > 0) {
       query = state.globalTaskQueue.shift();
-      console.log('\n' + theme.user(`❯ `) + query);
-      console.log(theme.info(`\n[Auto-Processing Next Task from Queue...]\n`));
+      console.log(`❯ ${query}`);
+      console.log(`[Auto-Processing Next Task from Queue...]`);
     } else {
-      // cheap-style input: dark background, exact placeholder text
-      const inputVal2 = state.preInputBuffer || '';
-      const promptLabel = '\n\n' + theme.accent('❯ ');
       const activeTip = getNextTip();
-      query = await askInputWithSlashCatch(promptLabel, inputVal2, getStatusBar, activeTip, state, buildSystemPrompt);
+      uiBridge.updateState({ activeTip });
+      query = await uiBridge.awaitInput("Write Your Task...");
     }
 
     if (!query) continue;
@@ -587,143 +628,9 @@ export async function startChatLoop() {
       isThinking = true;
       isInterrupted = false;
 
-      let escCount = 0;
-      const escListener = (char, key) => {
-        if (key && key.name === 'escape') {
-          escCount++;
-          if (escCount >= 2 && !abortController.signal.aborted) {
-            isInterrupted = true;
-            abortController.abort();
-            safeLogMsg(theme.warning("\n⚠️  User Interrupted API Call."));
-          }
-        }
-      };
-
-      let wasRawSpinner = false;
-      if (process.stdin.isTTY) {
-        wasRawSpinner = process.stdin.isRaw;
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-      }
-
-      process.stdin.on('keypress', escListener);
-
-      let isSpinning = true;
-      let spinnerFrameIdx = 0;
-      const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f));
-      const borderFrames = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '▊', '▋', '▌', '▍', '▎'];
-
-      let previousLines = 0;
-      let firstRender = true;
-
-      const erasePreviousLines = () => {
-        if (previousLines === 0) return;
-        debugRender('SPINNER', 'Erasing previous lines', { count: previousLines });
-        readline.cursorTo(process.stdout, 0);
-        let seq = '';
-        for (let i = 0; i < previousLines; i++) {
-          seq += '\x1b[2K';
-          if (i < previousLines - 1) seq += '\x1b[1A';
-        }
-        seq += '\x1b[G';
-        process.stdout.write(seq);
-        previousLines = 0;
-      };
-
-      const renderSpinner = () => {
-        if (!isSpinning) return;
-        debugRender('SPINNER', 'Rendering frame', { frameIdx: spinnerFrameIdx, text: state.currentSpinnerText });
-        const baseText = state.currentSpinnerText || theme.dim('Thinking...');
-        let queueText = '';
-        if (state.globalTaskQueue.length > 0) {
-          const queueLines = state.globalTaskQueue.map((q, i) => chalk.gray(`[Pending Q${i + 1}]: ${q.length > 50 ? q.slice(0, 50) + '...' : q}`)).join('\n');
-          queueText = `\n\n${queueLines}\n${theme.warning(`[Press ESC to cancel last]`)}`;
-        }
-
-        const borderChar = theme.accent ? theme.accent(borderFrames[spinnerFrameIdx % borderFrames.length]) : chalk.gray(borderFrames[spinnerFrameIdx % borderFrames.length]);
-        const spinnerChar = spinnerFrames[spinnerFrameIdx % spinnerFrames.length];
-        const outStr = `${borderChar} ${spinnerChar} ${baseText}${queueText}${getStickyBottomText(spinnerFrameIdx)}`;
-
-        const lines = countPhysicalLineFeeds(outStr) + 1;
-        if (firstRender) {
-          debugRender('SPINNER', 'First render - reserving space', { lines });
-          firstRender = false;
-          process.stdout.write('\n'.repeat(lines) + `\x1b[${lines}A`);
-        } else {
-          erasePreviousLines();
-        }
-
-        process.stdout.write(outStr);
-        previousLines = lines;
-      };
-
-      process.stdout.write('\x1b[?25l');
-
-      const spinnerInterval = setInterval(() => {
-        if (!isSpinning) return;
-        spinnerFrameIdx = (spinnerFrameIdx + 1) % spinnerFrames.length;
-        renderSpinner();
-      }, 30);
-
-      const spinner = {
-        start: () => {
-          isSpinning = true;
-          setConsoleSpinnerHooks(
-            () => {
-              if (isSpinning && previousLines > 0) {
-                erasePreviousLines();
-              }
-            },
-            () => {
-              if (isSpinning) {
-                renderSpinner();
-              }
-            }
-          );
-          renderSpinner();
-          return spinner;
-        },
-        stop: () => {
-          isSpinning = false;
-          setConsoleSpinnerHooks(null, null);
-          if (previousLines > 0) {
-            erasePreviousLines();
-          }
-          return spinner;
-        },
-        clear: () => {
-          if (previousLines > 0) {
-            erasePreviousLines();
-          }
-          return spinner;
-        },
-        fail: (msg) => {
-          isSpinning = false;
-          setConsoleSpinnerHooks(null, null);
-          if (previousLines > 0) {
-            erasePreviousLines();
-          }
-          if (msg) console.log(msg);
-          return spinner;
-        },
-        succeed: (msg) => {
-          isSpinning = false;
-          setConsoleSpinnerHooks(null, null);
-          if (previousLines > 0) {
-            erasePreviousLines();
-          }
-          if (msg) console.log(msg);
-          return spinner;
-        },
-        get text() { return state.currentSpinnerText; },
-        set text(val) {
-          state.currentSpinnerText = val;
-          if (isSpinning) renderSpinner();
-        }
-      };
+      uiBridge.updateState({ isThinking: true, currentSpinnerText: 'Thinking...' });
 
       const safeLogMsg = (msg) => {
-        erasePreviousLines();
         if (msg) console.log(msg);
       };
 
@@ -809,18 +716,10 @@ export async function startChatLoop() {
               managerMemory.push({ query: userPrintText, decision: managerDecision });
               await saveManagerMemory(state.chatId, managerMemory);
             } else if (managerDecision.action === 'suggest_role_change') {
-              spinner.stop();
-              spinner.clear();
-              if (process.stdin.isTTY) process.stdin.setRawMode(false);
-
-              const { confirm } = await import('@inquirer/prompts');
-              const answer = await confirm({
-                message: `\n[Agent Manager] You are currently in '${currentTeamModeName}' mode, but this task seems better suited for '${managerDecision.suggested_role}'. Switch active role?`,
-                default: true
+              const { inkConfirm } = await import('../ui/ink/utils.mjs');
+              const answer = await inkConfirm({
+                message: `[Agent Manager] You are currently in '${currentTeamModeName}' mode, but this task seems better suited for '${managerDecision.suggested_role}'. Switch active role?`
               });
-
-              if (process.stdin.isTTY) process.stdin.setRawMode(true);
-              spinner.start();
 
               if (answer) {
                 const { saveTeamModeSettings } = await import('./history.mjs');
@@ -842,13 +741,9 @@ export async function startChatLoop() {
               managerMemory.push({ query: userPrintText, decision: managerDecision, userAcceptedChange: answer });
               await saveManagerMemory(state.chatId, managerMemory);
             } else if (managerDecision.action === 'ask_plan_approval') {
-              spinner.stop();
-              spinner.clear();
-              if (process.stdin.isTTY) process.stdin.setRawMode(false);
-
-              const { select, input } = await import('@inquirer/prompts');
-              const choice = await select({
-                message: `\n[Agent Manager] The Planner has generated a plan. Would you like to proceed?`,
+              const { inkSelect, inkInput } = await import('../ui/ink/utils.mjs');
+              const choice = await inkSelect({
+                message: `[Agent Manager] The Planner has generated a plan. Would you like to proceed?`,
                 choices: [
                   { name: 'Yes (Proceed to Builder)', value: 'yes' },
                   { name: 'No (Stop Execution)', value: 'no' },
@@ -857,19 +752,15 @@ export async function startChatLoop() {
               });
 
               if (choice === 'no') {
-                console.log(theme.dim("\n[Manager] Execution stopped by user."));
-                if (process.stdin.isTTY) process.stdin.setRawMode(true);
+                console.log(theme.dim("[Manager] Execution stopped by user."));
                 turnIsActive = false;
                 break;
               } else if (choice === 'custom') {
-                const customMsg = await input({ message: "Enter your feedback/modifications for the plan:" });
+                const customMsg = await inkInput({ message: "Enter your feedback/modifications for the plan:" });
                 state.messages.push({ role: 'user', content: `[User Plan Feedback]: ${customMsg}` });
                 userPrintText = `[User Plan Feedback]: ${customMsg}`;
                 managerMemory.push({ query: userPrintText, decision: managerDecision });
                 await saveManagerMemory(state.chatId, managerMemory);
-
-                if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                spinner.start();
                 continue;
               } else if (choice === 'yes') {
                 const proceedMsg = "[User Plan Approval]: The plan is approved. Proceed with building the plan.";
@@ -886,81 +777,49 @@ export async function startChatLoop() {
                   await saveTeamModeSettings(engineerIdx, state.isTeamModeEnabled);
                   currentTeamModeName = 'coder';
                 }
-
-                if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                spinner.start();
                 continue;
               }
             } else if (managerDecision.action === 'respond' || managerDecision.action === 'ask_clarification') {
               if (!state.isThinkingHidden) {
-                console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]\n`));
+                console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]`));
               }
-              const renderedText = marked(managerDecision.instruction || "");
-              const chunks = renderedText.split(/(\s+)/);
-
-              let managerResponseText = "";
-              let managerAnimIdx = 0;
-              let lastFullText = "";
-
+              
+              uiBridge.updateState({ isThinking: true, currentSpinnerText: 'Manager is responding...', streamingText: '' });
+              
+              const chunks = (managerDecision.instruction || "").split(/(\s+)/);
+              let tempContent = "";
               for (const chunk of chunks) {
-                if (lastFullText) {
-                  const linesToMoveUp = countPhysicalLineFeeds(lastFullText);
-                  if (linesToMoveUp > 0) {
-                    readline.moveCursor(process.stdout, 0, -linesToMoveUp);
-                  }
-                  readline.cursorTo(process.stdout, 0);
-                  readline.clearScreenDown(process.stdout);
-                }
-
-                managerResponseText += chunk;
-                managerAnimIdx++;
-
-                const baseText = state.currentSpinnerText || theme.dim('Manager is responding...');
-                const stickyText = `\n\n${theme.accent('▍')} ${theme.info('⠋')} ${baseText}` + getStickyBottomText(managerAnimIdx);
-
-                lastFullText = managerResponseText + stickyText;
-                process.stdout.write(lastFullText);
-
+                tempContent += chunk;
+                uiBridge.updateState({ streamingText: tempContent });
                 await new Promise(r => setTimeout(r, 20));
               }
 
-              if (lastFullText) {
-                const linesToMoveUp = countPhysicalLineFeeds(lastFullText);
-                if (linesToMoveUp > 0) {
-                  readline.moveCursor(process.stdout, 0, -linesToMoveUp);
-                }
-                readline.cursorTo(process.stdout, 0);
-                readline.clearScreenDown(process.stdout);
-
-                process.stdout.write(managerResponseText);
-              }
-              console.log();
+              uiBridge.updateState({ isThinking: false, streamingText: '' });
+              state.messages.push({ role: 'assistant', content: managerDecision.instruction });
+              uiBridge.rerender();
+              
               managerMemory.push({ query: userPrintText, decision: managerDecision });
               await saveManagerMemory(state.chatId, managerMemory);
-              state.messages.push({ role: 'assistant', content: managerDecision.instruction });
 
               if (managerDecision.options && Array.isArray(managerDecision.options) && managerDecision.options.length > 0) {
-                spinner.stop();
-                spinner.clear();
-                if (process.stdin.isTTY) process.stdin.setRawMode(false);
-                process.stdin.removeListener("keypress", preInputCollector);
-
-                const { select, input } = await import('@inquirer/prompts');
+                const { inkSelect, inkInput } = await import('../ui/ink/utils.mjs');
                 const choices = managerDecision.options.map(opt => ({ name: opt, value: opt }));
                 choices.push({ name: 'Write Custom Message...', value: '__custom__' });
+                choices.push({ name: 'Cancel', value: '__cancel__' });
 
-                let answer = await select({
+                let answer = await inkSelect({
                   message: 'Select an option:',
                   choices
                 });
 
-                if (answer === '__custom__') {
-                  answer = await input({ message: 'Your message:' });
+                if (answer === '__cancel__') {
+                  turnIsActive = false;
+                  break;
                 }
 
-                if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                process.stdin.on("keypress", preInputCollector);
-                spinner.start();
+                if (answer === '__custom__') {
+                  answer = await inkInput({ message: 'Your message:' });
+                }
 
                 if (answer) {
                   userPrintText = answer;
@@ -988,114 +847,8 @@ export async function startChatLoop() {
           let totalTokens = 0;
           let usageObj = null;
 
-          let streamAnimIdx = 0;
-          let stickyLinesCount = 0;
-          let previousLines = [];
-
-          const bFrames = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '▊', '▋', '▌', '▍', '▎'];
-          const sFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-          const eraseSticky = () => {
-            if (stickyLinesCount === 0) return;
-            const moveUp = Math.max(0, stickyLinesCount - 1);
-            if (moveUp > 0) {
-              readline.moveCursor(process.stdout, 0, -moveUp);
-            }
-            readline.cursorTo(process.stdout, 0);
-            readline.clearScreenDown(process.stdout);
-
-            const lastLine = previousLines.length > 0 ? previousLines[previousLines.length - 1] : "";
-            const lastLineWidth = stripAnsiLocal(lastLine).length % (process.stdout.columns || 80);
-            if (lastLineWidth > 0) {
-              readline.cursorTo(process.stdout, lastLineWidth);
-            } else {
-              readline.cursorTo(process.stdout, 0);
-            }
-
-            stickyLinesCount = 0;
-          };
-          eraseStickyFn = eraseSticky;
-
-          const renderFrame = () => {
-            eraseSticky();
-
-            if (responseMessage.content) {
-              let rendered = responseMessage.content;
-
-              if (state.isThinkingHidden) {
-                // Strip thinking blocks entirely, including unclosed ones during streaming
-                rendered = rendered.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
-                rendered = rendered.replace(/<thought>[\s\S]*?<\/thought>/g, '');
-                rendered = rendered.replace(/<thinking>[\s\S]*$/, '');
-                rendered = rendered.replace(/<thought>[\s\S]*$/, '');
-              }
-
-              // Only apply markdown rendering after streaming is complete to avoid mid-stream flicker
-              if (!isStreaming) {
-                rendered = marked(rendered);
-              }
-
-              if (!state.isThinkingHidden) {
-                rendered = rendered.replace(/<thinking>/g, '\x1b[90m');
-                rendered = rendered.replace(/<\/thinking>/g, '\x1b[0m');
-                rendered = rendered.replace(/<thought>/g, '\x1b[90m');
-                rendered = rendered.replace(/<\/thought>/g, '\x1b[0m');
-
-                let openT = rendered.lastIndexOf('\x1b[90m');
-                let closeT = rendered.lastIndexOf('\x1b[0m');
-                if (openT > closeT) {
-                  rendered += '\x1b[0m';
-                }
-              }
-
-              const fullRendered = rendered.trimEnd();
-              const borderStr = theme.border ? theme.border('▌ ') : chalk.gray('▌ ');
-              const newLines = fullRendered.split('\n').map(line => borderStr + line);
-
-              let diffIndex = 0;
-              while (diffIndex < previousLines.length && diffIndex < newLines.length && previousLines[diffIndex] === newLines[diffIndex]) {
-                diffIndex++;
-              }
-
-              if (diffIndex < newLines.length || diffIndex < previousLines.length) {
-                if (diffIndex === previousLines.length) {
-                  const textToPrint = '\n' + newLines.slice(diffIndex).join('\n');
-                  process.stdout.write(textToPrint);
-                } else {
-                  const changedText = previousLines.slice(diffIndex).join('\n');
-                  let linesToMoveUp = countPhysicalLineFeeds(changedText);
-
-                  if (linesToMoveUp > 0) {
-                    readline.moveCursor(process.stdout, 0, -linesToMoveUp);
-                  }
-                  readline.cursorTo(process.stdout, 0);
-                  readline.clearScreenDown(process.stdout);
-
-                  const textToPrint = newLines.slice(diffIndex).join('\n');
-                  process.stdout.write(textToPrint);
-                }
-                previousLines = newLines;
-              }
-            }
-
-            streamAnimIdx++;
-            const baseText = state.currentSpinnerText || theme.dim('Thinking...');
-            const bChar = theme.accent ? theme.accent(bFrames[streamAnimIdx % bFrames.length]) : chalk.gray(bFrames[streamAnimIdx % bFrames.length]);
-            const sChar = theme.info ? theme.info(sFrames[streamAnimIdx % sFrames.length]) : chalk.cyan(sFrames[streamAnimIdx % sFrames.length]);
-
-            const stickyText = `\n\n${bChar} ${sChar} ${baseText}` + getStickyBottomText(streamAnimIdx);
-            stickyLinesCount = countPhysicalLineFeeds(stickyText) + 1;
-            process.stdout.write(stickyText);
-          };
-
-          spinner.stop();
-          spinner.clear();
-          renderFrame(); // Instant draw to prevent blink!
-
-          // Independent Render Loop for ultra-smooth UI during TTFT and Stream (25 FPS)
-          renderInterval = setInterval(() => {
-            if (isStreaming) renderFrame();
-          }, 40);
+          const activeRoleName = delegatedRole || currentTeamModeName || 'default';
+          uiBridge.updateState({ isThinking: true, currentSpinnerText: `${activeRoleName.toUpperCase()} is thinking...`, streamingText: '' });
 
           let injectedManagerMsg = false;
           if (managerDecision && managerDecision.action === 'delegate') {
@@ -1144,6 +897,7 @@ export async function startChatLoop() {
               currentInputTokens = usageObj.prompt_tokens || 0;
               currentOutputTokens = usageObj.completion_tokens || 0;
               totalTokens = usageObj.total_tokens || 0;
+              updateUIStatusBar();
             }
 
             if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
@@ -1155,6 +909,7 @@ export async function startChatLoop() {
 
             if (delta.content) {
               responseMessage.content += delta.content;
+              uiBridge.updateState({ streamingText: responseMessage.content });
             }
 
             if (delta.tool_calls) {
@@ -1177,17 +932,14 @@ export async function startChatLoop() {
           }
 
           isStreaming = false;
-          clearInterval(renderInterval);
-          renderFrame(); // Ensure the final content is rendered before erasing sticky!
-          eraseSticky();
-
-          process.stdout.write('\n\n');
+          uiBridge.updateState({ isThinking: false, streamingText: '' });
 
           writeDebugLog("App: Agent AI Response Generated", {
             contentLength: responseMessage.content?.length,
             tool_calls: responseMessage.tool_calls?.map(tc => tc.function?.name)
           });
           state.messages.push(responseMessage);
+          uiBridge.rerender();
 
           if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
             for (const toolCall of responseMessage.tool_calls) {
@@ -1235,6 +987,20 @@ export async function startChatLoop() {
               try {
                 const argsString = typeof args === 'string' ? args : JSON.stringify(args);
                 writeDebugLog(`App: Executing Tool: ${toolName}`, { argsPreview: argsString?.substring(0, 500) });
+                
+                let activeToolDesc = toolName;
+                if (args && typeof args === 'object') {
+                  if (toolName === 'view_file') {
+                    const filename = args.AbsolutePath ? path.basename(args.AbsolutePath) : '';
+                    activeToolDesc = `Reading file: ${filename} (Lines ${args.StartLine || 1} - ${args.EndLine || 800})`;
+                  } else if (toolName === 'replace_file_content') {
+                    const filename = args.TargetFile ? path.basename(args.TargetFile) : '';
+                    activeToolDesc = `Editing file: ${filename} (Lines ${args.StartLine || 1} - ${args.EndLine || 1})`;
+                  } else if (toolName === 'run_command') {
+                    activeToolDesc = `Running: ${args.CommandLine}`;
+                  }
+                }
+                uiBridge.updateState({ activeTool: activeToolDesc });
                 toolResult = await executeTool(toolName, args, toolCtx);
                 writeDebugLog(`App: Tool Result: ${toolName}`, { resultPreview: typeof toolResult === 'string' ? toolResult.substring(0, 500) : "Object returned" });
                 if (typeof toolResult !== 'string') {
@@ -1247,6 +1013,8 @@ export async function startChatLoop() {
                   toolResult = `Error executing tool: ${e.message}`;
                   writeDebugLog(`App: Tool Execution Error: ${toolName}`, e, "ERROR");
                 }
+              } finally {
+                uiBridge.updateState({ activeTool: null });
               }
 
               state.messages.push({
@@ -1255,24 +1023,18 @@ export async function startChatLoop() {
                 name: toolName,
                 content: toolResult
               });
+              uiBridge.rerender();
 
               if (toolResult === "__PLAN_CREATED__") {
-                spinner.stop();
-                process.stdin.removeListener("keypress", preInputCollector);
-
                 try {
-                  const { select, input } = await import('@inquirer/prompts');
-                  const { getPromptTheme } = await import('../ui/theme.mjs');
-                  const chalk = (await import('chalk')).default;
-
-                  const action = await select({
+                  const { inkSelect, inkInput } = await import('../ui/ink/utils.mjs');
+                  const action = await inkSelect({
                     message: 'Please review the generated plan in your browser:',
                     choices: [
                       { name: chalk.green('Yes (Proceed to Builder)'), value: 'proceed' },
                       { name: chalk.yellow('Custom Message (Modify Plan)'), value: 'custom' },
                       { name: chalk.red('No (Cancel)'), value: 'cancel' }
-                    ],
-                    theme: getPromptTheme()
+                    ]
                   });
 
                   if (action === 'proceed') {
@@ -1283,9 +1045,8 @@ export async function startChatLoop() {
                     console.log(chalk.red("Plan cancelled."));
                     turnIsActive = false;
                   } else if (action === 'custom') {
-                    const customMsg = await input({
-                      message: 'What changes would you like to make?',
-                      theme: getPromptTheme()
+                    const customMsg = await inkInput({
+                      message: 'What changes would you like to make?'
                     });
                     if (customMsg.trim()) {
                       state.globalTaskQueue.push(customMsg.trim());
@@ -1296,12 +1057,8 @@ export async function startChatLoop() {
                     }
                   }
                 } catch (e) {
-                  // User aborted the prompt
                   turnIsActive = false;
                 }
-
-                if (process.stdin.isTTY) process.stdin.setRawMode(true);
-                process.stdin.on("keypress", preInputCollector);
               }
             }
           } else {
@@ -1393,16 +1150,9 @@ export async function startChatLoop() {
           }
         }
       } finally {
-        clearInterval(spinnerInterval);
-        spinner.stop();
+        uiBridge.updateState({ isThinking: false });
         isThinking = false;
         currentAbortController = null;
-        process.stdin.removeListener('keypress', escListener);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(wasRawSpinner);
-          process.stdin.pause();
-        }
-        process.stdout.write('\x1b[?25h');
       }
     }
   }

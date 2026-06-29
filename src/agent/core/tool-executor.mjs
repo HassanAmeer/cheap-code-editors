@@ -3,7 +3,7 @@
  * // Do not remove
  */
 import path from 'path';
-import { select, input } from '@inquirer/prompts';
+import { inkSelect as select, inkInput as input } from '../../ui/ink/utils.mjs';
 import chalk from 'chalk';
 import { theme, getPromptTheme } from '../../ui/theme.mjs';
 import { runTerminalCommand } from '../../tools/terminal.mjs';
@@ -243,8 +243,6 @@ export async function executeTool(toolName, args, ctx) {
     return res;
   }
   else if (toolName === "ask_question") {
-    spinner.stop();
-    process.stdin.removeListener("keypress", ctx.preInputCollector);
     playNotification();
 
     // ── Display context_message if provided ──
@@ -268,33 +266,23 @@ export async function executeTool(toolName, args, ctx) {
 
         answer = await select({
           message: args.question,
-          choices,
-          theme: getPromptTheme()
+          choices
         });
 
         // Handle custom message input
         if (answer === '__custom__') {
           answer = await input({
-            message: chalk.hex('#3498DB')('Your message:'),
-            theme: getPromptTheme()
+            message: chalk.hex('#3498DB')('Your message:')
           });
         }
       } else {
         answer = await input({
-          message: args.question,
-          theme: getPromptTheme()
+          message: args.question
         });
       }
     } catch (e) {
-      if (e.name === 'ExitPromptError' || e.name === 'AbortPromptError' || (e.message && e.message.includes('SIGINT'))) {
-        throw new Error("USER_ABORT");
-      }
+      throw new Error("USER_ABORT");
     }
-    if (process.stdin.isTTY) process.stdin.setRawMode(true);
-    process.stdin.on("keypress", ctx.preInputCollector);
-
-    state.currentSpinnerText = theme.dim('Thinking...');
-    if (!spinner.isSpinning) spinner.start();
 
     if (!answer) throw new Error("USER_ABORT");
     return `User Answered: ${answer}`;

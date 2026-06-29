@@ -1,5 +1,5 @@
 {
-  "currentModel": "meta-llama/llama-3.3-70b-instruct:free",
+  "currentModel": "big-pickle",
   "autoPermissionMode": "full",
   "isAutoPromptEnabled": false,
   "voiceProvider": "offline",
@@ -49,13 +49,13 @@
       "baseURL": "https://zenmux.ai/api/v1"
     }
   },
-  "isSoundEnabled": false,
+  "isSoundEnabled": true,
   "currentTheme": "cheap",
   "autoContinueMaxRetries": 3,
   "isThinkingHidden": false,
-  "isManagerAgentEnabled": true,
+  "isManagerAgentEnabled": false,
   "modelRoles": {
-    "auto": "north-mini-code-free",
+    "auto": "big-pickle",
     "planner": "deepseek-v4-flash-free",
     "builder": "big-pickle",
     "fixer": "deepseek-v4-flash-free",
@@ -74,7 +74,7 @@
     "engineer": "deepseek-v4-flash-free",
     "operator": "deepseek-v4-flash-free",
     "coder": "big-pickle",
-    "adviser AI": "north-mini-code-free",
+    "adviser AI": "deepseek-v4-flash-free",
     "system&web agent": "north-mini-code-free"
   },
   "tokenUsageLimit": 0,

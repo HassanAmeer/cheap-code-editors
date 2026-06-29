@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { select, input, confirm, editor } from '@inquirer/prompts';
+import { editor } from '@inquirer/prompts';
+import { inkSelect as select, inkInput as input, inkConfirm as confirm } from './ink/utils.mjs';
 import { theme, getPromptTheme } from './theme.mjs';
 import { addCustomSkill, removeSkill, getSkillsList, readSkillContent } from '../tools/skills.mjs';
 import { PROJECTS_DIR } from '../tools/file-system.mjs';
@@ -24,8 +25,7 @@ export async function handleSkillsPrompt() {
           { name: chalk.gray('🗑 Delete a Skill'), value: 'delete' },
           { name: chalk.gray('✕ Back to Main Menu'), value: 'back' }
         ],
-        theme: getPromptTheme()
-      });
+        });
 
       if (choice === 'back') {
         break;
@@ -75,8 +75,7 @@ export async function handleSkillsPrompt() {
             { name: chalk.gray('2) Use Terminal Editor (vim/nano)'), value: 'editor' },
             { name: chalk.gray('3) Paste short text / Single line here'), value: 'input' }
           ],
-          theme: getPromptTheme()
-        });
+          });
 
         const defaultContent = `<!-- 
 💡 HOW TO SAVE & EXIT THIS EDITOR:
@@ -106,7 +105,7 @@ Nano: Press Ctrl+O, then Enter, then Ctrl+X
           console.log(theme.info(`File path: ${res.path}\n`));
         } else {
           console.log(theme.warning(`⚠️ Skill folder '${folderName}' already exists!`));
-          const overwrite = await confirm({ message: 'Do you want to overwrite it?', default: false, theme: getPromptTheme() });
+          const overwrite = await confirm({ message: 'Do you want to overwrite it?', default: false, });
           if (overwrite) {
             const resOver = await addCustomSkill(folderName, skillTitle, cleanDesc, content, true);
             if (resOver.success) {
@@ -162,7 +161,7 @@ Nano: Press Ctrl+O, then Enter, then Ctrl+X
             console.log(theme.success(`✔ Custom skill '${skillTitle}' imported successfully!\n`));
           } else {
             console.log(theme.warning(`⚠️ Skill folder '${folderName}' already exists!`));
-            const overwrite = await confirm({ message: 'Do you want to overwrite it?', default: false, theme: getPromptTheme() });
+            const overwrite = await confirm({ message: 'Do you want to overwrite it?', default: false, });
             if (overwrite) {
               await addCustomSkill(folderName, skillTitle, description, content, true);
               console.log(theme.success(`✔ Custom skill overwritten successfully!\n`));
@@ -274,8 +273,7 @@ After you install skill it will be available in this folder and also you can see
             })),
             { name: '← Back', value: 'back' }
           ],
-          theme: getPromptTheme()
-        });
+          });
 
         if (viewChoice !== 'back') {
           const content = await readSkillContent(viewChoice);
@@ -301,8 +299,7 @@ After you install skill it will be available in this folder and also you can see
             })),
             { name: '✕ Cancel', value: 'cancel' }
           ],
-          theme: getPromptTheme()
-        });
+          });
 
         if (deleteChoice !== 'cancel') {
           const isAuto = list.find(s => s.folderName === deleteChoice)?.isAuto;
@@ -312,8 +309,7 @@ After you install skill it will be available in this folder and also you can see
           const proceed = await confirm({
             message: `Are you sure you want to delete the skill '${deleteChoice}'?`,
             default: false,
-            theme: getPromptTheme()
-          });
+            });
 
           if (proceed) {
             const success = await removeSkill(deleteChoice);

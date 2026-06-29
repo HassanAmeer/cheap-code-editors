@@ -5,7 +5,7 @@ import fs from 'fs';
 import { theme, getPromptTheme } from '../ui/theme.mjs';
 import ora from 'ora';
 import chalk from 'chalk';
-import { confirm } from '@inquirer/prompts';
+import { inkConfirm as confirm } from '../ui/ink/utils.mjs';
 import { checkAndInstallMissingDependencies } from './loop.mjs';
 import { queryCodegraph } from '../tools/codegraph.mjs';
 
@@ -100,9 +100,7 @@ export async function startAutoHealer(scriptName, projectsDir, currentModel = "b
       
       try {
         const proceed = await confirm({ 
-          message: 'Should the AI analyze and fix this error automatically using CodeGraph?', 
-          default: true, 
-          theme: getPromptTheme() 
+          message: 'Should the AI analyze and fix this error automatically using CodeGraph?' 
         });
 
         if (proceed) {

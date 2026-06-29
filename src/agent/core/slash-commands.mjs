@@ -9,7 +9,7 @@ import os from 'os';
 import fs from 'fs/promises';
 import chalk from 'chalk';
 import ora from 'ora';
-import { search, input, confirm, select } from '@inquirer/prompts';
+import { inkSearch as search, inkInput as input, inkConfirm as confirm, inkSelect as select } from '../../ui/ink/utils.mjs';
 import { theme, getPromptTheme } from '../../ui/theme.mjs';
 import { execAsync, spawnAndCollect, handleExit, nativeFolderPicker } from '../utils/process.mjs';
 import { PROJECTS_DIR, getWorkspaceTree } from '../../tools/file-system.mjs';
@@ -184,36 +184,15 @@ export async function executeSlashCommand(cmdInput, ctx) {
         { name: '✕ Cancel', value: 'cancel' }
       ];
       const choices = rawChoices.map(c => ({ name: theme.dim(c.name), value: c.value, rawName: c.name }));
-      const ac = new AbortController();
-      const escHandler = (char, key) => {
-        if (key && key.name === 'escape') ac.abort();
-      };
-      process.stdin.on('keypress', escHandler);
-
       try {
         cmdStr = await search({
-          message: 'Select a command (Press ESC to cancel):',
-          source: async (input, { signal }) => {
-            if (!input) return choices;
-            const term = input.toLowerCase();
-            return choices.filter(c => c.rawName.toLowerCase().includes(term) || c.value.toLowerCase().includes(term));
-          },
-          theme: {
-            prefix: theme.info('/'),
-            style: {
-              highlight: (text) => theme.info.bold(text.replace(/\x1B\[\d+m/g, '')),
-              searchTerm: (text) => theme.info(text),
-              keysHelpTip: (keys) => {
-                const parts = keys.map(k => `${theme.info(k[0])} ${theme.dim(k[1])}`);
-                parts.push(`${theme.info('←')} ${theme.dim('esc')}`);
-                return parts.join(theme.dim(' • '));
-              }
-            }
-          }
-        }, { signal: ac.signal });
-      } finally {
-        process.stdin.removeListener('keypress', escHandler);
+          message: 'Select a command:',
+          choices
+        });
+      } catch (err) {
+        return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
       }
+      if (!cmdStr) return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
       lowerCmd = cmdStr.toLowerCase();
     } catch (err) {
       if (err.name === 'ExitPromptError' || err.name === 'AbortPromptError') {
@@ -1381,7 +1360,7 @@ Extensions
       { name: "Voice by online (Any)" + (currentProv === "speechmatics" ? " (Current)" : ""), value: "speechmatics" }
     ];
 
-    const { select } = await import('@inquirer/prompts');
+    const { inkSelect: select } = await import('../../ui/ink/utils.mjs');
     try {
       const selectedProv = await select({
         message: "Select Voice Provider:",
