@@ -5,6 +5,7 @@
 import chalk from 'chalk';
 import logUpdate from 'log-update';
 import ora from 'ora';
+import gradient from 'gradient-string';
 import path from 'path';
 import readline from 'readline';
 import { marked } from 'marked';
@@ -330,8 +331,7 @@ export async function startChatLoop() {
 
     if (state.globalTaskQueue.length > 0) {
       query = state.globalTaskQueue.shift();
-      console.log(`❯ ${query}`);
-      console.log(`[Auto-Processing Next Task from Queue...]`);
+      console.log(gradient.pastel('[Auto-Processing Next Task from Queue...]'));
       if (state.sessionTasks) {
         const task = state.sessionTasks.find(t => t.text === query && t.status === 'queued');
         if (task) task.status = 'running';
@@ -799,9 +799,9 @@ export async function startChatLoop() {
               if (!state.isThinkingHidden) {
                 console.log(theme.dim(`[Manager ${managerDecision.action === 'ask_clarification' ? 'Asking Clarification' : 'Responding Directly'}]`));
               }
-              
+
               uiBridge.updateState({ isThinking: true, currentSpinnerText: 'Manager is responding...', streamingText: '' });
-              
+
               const chunks = (managerDecision.instruction || "").split(/(\s+)/);
               let tempContent = "";
               for (const chunk of chunks) {
@@ -814,7 +814,7 @@ export async function startChatLoop() {
               console.log(`\n${managerDecision.instruction}\n`);
               state.messages.push({ role: 'assistant', content: managerDecision.instruction });
               uiBridge.rerender();
-              
+
               managerMemory.push({ query: userPrintText, decision: managerDecision });
               await saveManagerMemory(state.chatId, managerMemory);
 
@@ -1007,7 +1007,7 @@ export async function startChatLoop() {
               try {
                 const argsString = typeof args === 'string' ? args : JSON.stringify(args);
                 writeDebugLog(`App: Executing Tool: ${toolName}`, { argsPreview: argsString?.substring(0, 500) });
-                
+
                 let activeToolDesc = toolName;
                 if (args && typeof args === 'object') {
                   if (toolName === 'view_file') {

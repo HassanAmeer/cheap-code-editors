@@ -184,8 +184,8 @@ export async function saveThinkingHiddenSetting(enabled) {
 export async function getThinkingHiddenSetting() {
     try {
         const state = readSettings();
-        return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : true;
-    } catch (err) { return true; }
+        return state.isThinkingHidden !== undefined && state.isThinkingHidden !== null ? state.isThinkingHidden : false;
+    } catch (err) { return false; }
 }
 
 export async function saveManagerAgentSetting(enabled) {

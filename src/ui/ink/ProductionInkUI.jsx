@@ -14,6 +14,7 @@ import InputPrompt from './InputPrompt.jsx';
 import SearchPrompt from './SearchPrompt.jsx';
 import { InputBox } from './InputBox.jsx';
 import { theme } from '../../ui/theme.mjs';
+import { StreamingResponse } from './StreamingResponse.jsx';
 
 // Custom Markdown Code Block Parser
 const parseBlocks = (text) => {
@@ -337,9 +338,13 @@ export const InkChatApp = () => {
     <Box flexDirection="column" height="100%">
       {/* Main content area */}
       <Box flexDirection="column" paddingY={0}>
-        {streamingText && (
-          <Box borderStyle="round" borderColor="gray" paddingX={1} marginY={1}>
-            <Text color="white">{streamingText}</Text>
+        {(isThinking || streamingText) && (
+          <Box paddingX={1} marginY={1}>
+            <StreamingResponse
+              content={streamingText}
+              isStreaming={isThinking}
+              spinnerText={currentSpinnerText}
+            />
           </Box>
         )}
         <ToolDisplay currentTool={activeTool} />
@@ -397,41 +402,48 @@ export const InkChatApp = () => {
 
         {/* Input box is sticky at the bottom */}
         <Box flexDirection="column">
-          {isThinking && currentSpinnerText && (
-            <Box paddingX={1} marginY={0}>
-              <Text color="yellow">
-                <Spinner spinner={cliSpinners.dots} />
+
+          {uiBridge.loopState?.globalTaskQueue?.length > 0 && (
+            <Box flexDirection="column" paddingX={1} marginY={0}>
+              <Text color="cyan" bold>
+                ⏳ Queued: {uiBridge.loopState.globalTaskQueue.length} message(s) in queue ({collapseQueue ? 'Ctrl+Q to view' : 'Ctrl+Q to hide'})
               </Text>
-              <Text color="yellow" bold> {currentSpinnerText}</Text>
+              {!collapseQueue && (
+                <Box flexDirection="column" marginLeft={2}>
+                  {uiBridge.loopState.globalTaskQueue.map((task, idx) => (
+                    <Text key={idx} color="gray">
+                      <Text color="cyan" bold> [{idx + 1}]</Text> {task}
+                    </Text>
+                  ))}
+                </Box>
+              )}
             </Box>
           )}
           {uiBridge.loopState?.sessionTasks?.length > 1 && (
             <Box flexDirection="column" paddingX={1} marginY={0}>
               <Text color="cyan" bold>
-                ⏳ Tasks: {uiBridge.loopState.sessionTasks.filter(t => t.status === 'completed').length}/{uiBridge.loopState.sessionTasks.length} completed ({collapseQueue ? 'Ctrl+Q to view' : 'Ctrl+Q to hide'})
+                ⏳ Tasks: {uiBridge.loopState.sessionTasks.filter(t => t.status === 'completed').length}/{uiBridge.loopState.sessionTasks.length} completed
               </Text>
-              {!collapseQueue && (
-                <Box flexDirection="column" marginLeft={2}>
-                  {uiBridge.loopState.sessionTasks.map((task, idx) => {
-                    const isCompleted = task.status === 'completed';
-                    const isRunning = task.status === 'running';
-                    return (
-                      <Box key={idx} flexDirection="row">
-                        <Text color={isCompleted ? 'green' : isRunning ? 'yellow' : 'cyan'} bold>
-                          {isCompleted ? '  [✓] ' : isRunning ? '  [▶] ' : '  [ ] '}
-                        </Text>
-                        <Text
-                          color={isCompleted ? 'gray' : isRunning ? 'yellow' : 'white'}
-                          underline={isCompleted}
-                          bold={isRunning}
-                        >
-                          {task.text}
-                        </Text>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              )}
+              <Box flexDirection="column" marginLeft={2}>
+                {uiBridge.loopState.sessionTasks.map((task, idx) => {
+                  const isCompleted = task.status === 'completed';
+                  const isRunning = task.status === 'running';
+                  return (
+                    <Box key={idx} flexDirection="row">
+                      <Text color={isCompleted ? 'green' : isRunning ? 'yellow' : 'cyan'} bold>
+                        {isCompleted ? '  [✓] ' : isRunning ? '  [▶] ' : '  [ ] '}
+                      </Text>
+                      <Text
+                        color={isCompleted ? 'gray' : isRunning ? 'yellow' : 'white'}
+                        underline={isCompleted}
+                        bold={isRunning}
+                      >
+                        {task.text}
+                      </Text>
+                    </Box>
+                  );
+                })}
+              </Box>
             </Box>
           )}
           {activeTip && !isThinking && (
