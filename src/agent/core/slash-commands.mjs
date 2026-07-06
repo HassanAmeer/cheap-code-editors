@@ -1,0 +1,1381 @@
+/**
+ * Parses and executes all slash commands (e.g. /ui, /commit, /test, /clear).
+ * all commands logics on the bottom side
+ * // Do not remove
+ */
+import path from 'path';
+import readline from 'readline';
+import os from 'os';
+import fs from 'fs/promises';
+import chalk from 'chalk';
+import ora from 'ora';
+import { inkSearch as search, inkInput as input, inkConfirm as confirm, inkSelect as select } from '../../ui/ink/utils.mjs';
+import { theme, getPromptTheme } from '../../ui/theme.mjs';
+import { execAsync, spawnAndCollect, handleExit, nativeFolderPicker } from '../utils/process.mjs';
+import { PROJECTS_DIR, getWorkspaceTree } from '../../tools/file-system.mjs';
+import { detectAndGenerateAutoSkills } from '../../tools/skills.mjs';
+import { buildSystemPrompt } from './system-prompt.mjs';
+import { getSoundEnabled, setSoundEnabled, playNotification } from '../../ui/sound.mjs';
+import { getClientForModel, getModelsGroupedByProvider } from '../../providers_models/index.mjs';
+import { saveAutoPermissionSetting, saveAutoPromptSetting, saveLastModel, deleteAllChats, saveChatHistory, getAvailableChats, deleteChat, loadChatHistory } from '../history.mjs';
+import { printLogo } from '../../ui/logo.mjs';
+import { getAllChatThreads, getChatState, updateChatState } from '../db.mjs';
+import { gridPrompt } from '../../ui/gridPrompt.mjs';
+import { undoAction } from '../../tools/editor.mjs';
+import { webAgent } from '../../../researches/web-agent-playwright-settings/index.mjs';
+
+async function chooseDirectoryInteractive(currentPath) {
+  let activePath = path.resolve(currentPath);
+
+  while (true) {
+    let entries = [];
+    try {
+      entries = await fs.readdir(activePath, { withFileTypes: true });
+    } catch (e) {
+      console.log(theme.error(`❌ Cannot read directory: ${activePath}`));
+      activePath = path.dirname(activePath);
+      continue;
+    }
+
+    const directories = entries
+      .filter(e => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.git'))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const choices = [
+      { name: theme.success(`✔ SELECT THIS FOLDER: ${activePath}`), value: '.' },
+      { name: theme.info(`🔙 .. (Go up to parent)`), value: '..' },
+      ...directories.map(d => ({ name: `📁 ${d.name}/`, value: d.name }))
+    ];
+
+    try {
+      const selection = await select({
+        message: `Project Directory Picker:`,
+        choices,
+        pageSize: 15,
+        theme: getPromptTheme()
+      });
+
+      if (selection === '.') {
+        return activePath;
+      } else if (selection === '..') {
+        activePath = path.resolve(activePath, '..');
+      } else {
+        activePath = path.resolve(activePath, selection);
+      }
+    } catch (e) {
+      throw e;
+    }
+  }
+}
+
+function parseTokenInput(val) {
+  if (!val) return null;
+  const clean = val.trim().toLowerCase();
+  if (clean.endsWith('k')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? null : Math.round(num * 1000);
+  }
+  if (clean.endsWith('m')) {
+    const num = parseFloat(clean.slice(0, -1));
+    return isNaN(num) ? null : Math.round(num * 1000000);
+  }
+  const num = parseInt(clean, 10);
+  return isNaN(num) ? null : num;
+}
+
+export async function executeSlashCommand(cmdInput, ctx) {
+  const {
+    state,
+    historyPrompt,
+    handleConfigPrompt,
+    handleSkillsPrompt,
+    handleThemePrompt,
+    startAutoHealer,
+    countPhysicalLineFeeds,
+    stripAnsiLocal
+  } = ctx;
+
+  let cmdStr = "";
+  if (typeof cmdInput === 'string') {
+    cmdStr = cmdInput.trim();
+  }
+  let lowerCmd = cmdStr.toLowerCase();
+  let query = cmdInput;
+  let pendingUiUrl = null;
+
+  if (lowerCmd === '/' || lowerCmd === '/help') {
+    try {
+      const themeChoiceName = '☼ theme         - Theme Color';
+
+      const autoPermChoiceName = `⛨ permission    - Auto Permission: ${state.autoPermissionMode.toUpperCase()}`;
+
+      const autoPromptChoiceName = state.isAutoPromptEnabled
+        ? '✍ autoprompt    - Auto Prompt Generation: ON'
+        : '✍ autoprompt    - Auto Prompt Generation: OFF';
+
+      const soundChoiceName = getSoundEnabled()
+        ? '♪ sound         - Sound Notifications: ON'
+        : '♪ sound         - Sound Notifications: OFF';
+
+      const teamChoiceName = state.isTeamModeEnabled
+        ? '⑆ team          - Multi-Agent Team Mode: ON'
+        : '⑆ team          - Multi-Agent Team Mode: OFF';
+
+      const autoContChoiceName = state.isAutoContinueEnabled
+        ? '⍾ auto_continue - Auto Continue on Stuck: ON'
+        : '⍾ auto_continue - Auto Continue on Stuck: OFF';
+
+      const autoModelChoiceName = state.isAutoModeEnabled
+        ? '⇄ auto models   - Auto Model Switching: ON'
+        : '⇄ auto models   - Auto Model Switching: OFF';
+
+      const autoContinueMaxTimeName = `⟲ auto retries  - Auto Continue Max Retries: ${state.autoContinueMaxRetries}`;
+
+      const usageLimitChoiceName = state.tokenUsageLimit !== undefined && state.tokenUsageLimit > 0
+        ? `⚙ usage_limit   - Set Token Usage Limit: ${state.tokenUsageLimit.toLocaleString()} tokens`
+        : `⚙ usage_limit   - Set Token Usage Limit: OFF`;
+
+      const thinkingHiddenChoiceName = state.isThinkingHidden
+        ? '👁 hide_thinking  - Hide AI Thinking Blocks: ON'
+        : '👁 hide_thinking  - Hide AI Thinking Blocks: OFF';
+
+      const managerAgentChoiceName = state.isManagerAgentEnabled
+        ? '🤖 manager_agent  - Agent Manager (Auto Orchestrator): ON'
+        : '🤖 manager_agent  - Agent Manager (Auto Orchestrator): OFF';
+
+      const rawChoices = [
+        { name: '⊘ clear         - Clear terminal and preserve memory', value: '/clear' },
+        { name: '⎇ new           - Clear terminal + start new session', value: '/new' },
+        { name: '⌦ choose_project- Change Active Project Directory', value: '/choose_project' },
+        { name: 'ϟ init          - Project Architect (Create new project)', value: '/init' },
+        { name: '◧ ui_edit       - Visual UI Editor (Browser-to-Code)', value: '/ui_edit' },
+        { name: '⇪ commit        - Git Auto-Pilot (Commit & Push)', value: '/commit' },
+        { name: teamChoiceName, value: '/team' },
+        { name: autoContChoiceName, value: '/auto_continue' },
+        { name: autoContinueMaxTimeName, value: '/auto_continue_max_time' },
+        { name: usageLimitChoiceName, value: '/usage_limit' },
+        { name: '▶ final_run_test- Run dev server & Auto-Healer watcher', value: '/final_run_test' },
+        { name: '✦ models        - Change AI Model', value: '/model' },
+        { name: '⊕ model_roles   - Assign Models per Role (plan/builder/fixer...)', value: '/model_roles' },
+        { name: autoModelChoiceName, value: '/auto' },
+        { name: managerAgentChoiceName, value: '/manager_agent' },
+        { name: '⬢ web agent     - Web Agent Task', value: '/web-agent' },
+        { name: '🎤 voice_to_text - Set Voice Provider', value: '/voice_to_text' },
+        { name: '↶ undo          - Undo the last edits', value: '/undo' },
+        { name: `± diff          - Review git changes in ${process.env.DEBUG === 'true' ? 'projects' : 'workspace'} directory`, value: '/diff' },
+        { name: '⏣ test_proj     - Start an auto-fix testing loop on project', value: '/test_proj' },
+        { name: '⍻ test_ai       - Test Current AI Model', value: '/test_ai' },
+        { name: '⎘ attach        - Attach an image or file', value: '/attach' },
+        { name: '⎘ attach_remove - Remove attached image or file', value: '/attach_remove' },
+        { name: '◷ history       - Last chats memory (sessions)', value: '/history' },
+        { name: '⇪ export        - Export Chat History (JSON & HTML)', value: '/export' },
+        { name: '⇘ import        - Import Chat History (JSON)', value: '/import' },
+        { name: '⌨ hotkeys        - Show all keyboard shortcuts', value: '/hotkeys' },
+        { name: '⟳ refresh       - Refresh Auto Workspace Memory', value: '/refresh' },
+        { name: '⚙ config AI     - Configure AI API Keys (Providers)', value: '/config' },
+        { name: '⚙ skills        - Manage Project Skills (Add/List/View/Delete)', value: '/skills' },
+        { name: themeChoiceName, value: '/theme' },
+        { name: autoPermChoiceName, value: '/permission' },
+        { name: autoPromptChoiceName, value: '/autoprompt' },
+        { name: soundChoiceName, value: '/sound' },
+        { name: thinkingHiddenChoiceName, value: '/hide_thinking' },
+        { name: '✖ delete_chats  - Delete all saved chats', value: '/delete_chats' },
+        { name: '⎋ exit          - Exit the CLI', value: '/exit' },
+        { name: '✕ Cancel', value: 'cancel' }
+      ];
+      const choices = rawChoices.map(c => ({ name: theme.dim(c.name), value: c.value, rawName: c.name }));
+      try {
+        cmdStr = await search({
+          message: 'Select a command:',
+          choices
+        });
+      } catch (err) {
+        return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
+      }
+      if (!cmdStr) return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
+      lowerCmd = cmdStr.toLowerCase();
+    } catch (err) {
+      if (err.name === 'ExitPromptError' || err.name === 'AbortPromptError') {
+        return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
+      }
+      if (err.message && err.message.includes('SIGINT')) {
+        handleExit();
+        return { action: 'continue' };
+      }
+      throw err;
+    }
+    if (lowerCmd === 'cancel') return { action: 'redraw', message: theme.dim("\nMenu cancelled.\n") };
+  }
+
+  if (typeof query === 'string' || typeof query === 'object') {
+    if (lowerCmd === '/model') {
+      const groups = getModelsGroupedByProvider();
+
+      const modeNames = [
+        'auto', 'planner', 'coder', 'system&web agent'
+      ];
+
+      let targetRole = null;
+      if (state.activeAgentMode && state.activeAgentMode !== 'default') {
+        targetRole = state.activeAgentMode;
+      } else {
+        const teamRole = modeNames[(state.teamModeIndex || 1) - 1] || 'auto';
+        if (teamRole !== 'auto') {
+          targetRole = teamRole;
+        }
+      }
+
+      let currentSelected = state.currentModel;
+      if (targetRole) {
+        if (!state.modelRoles) state.modelRoles = {};
+        currentSelected = state.modelRoles[targetRole] || state.currentModel;
+      }
+
+      const selectedModel = await gridPrompt(groups, currentSelected);
+
+      if (selectedModel) {
+        if (targetRole) {
+          if (!state.modelRoles) state.modelRoles = {};
+          state.modelRoles[targetRole] = selectedModel;
+          const { saveModelRoles } = await import('../history.mjs');
+          await saveModelRoles(state.modelRoles);
+          return { action: 'redraw', message: theme.success(`\n✔ Model for [${targetRole}] changed to: `) + theme.user(selectedModel) + '\n' };
+        } else {
+          state.currentModel = selectedModel;
+          await saveLastModel(state.currentModel);
+          return { action: 'redraw', message: theme.success(`\n✔ Model changed to: `) + theme.user(state.currentModel) + '\n' };
+        }
+      } else {
+        return { action: 'redraw', message: theme.dim("\nModel selection cancelled.\n") };
+      }
+    }
+
+    if (lowerCmd === '/model_roles') {
+      const { saveModelRoles } = await import('../history.mjs');
+      const roles = [
+        { key: 'adviser AI', label: 'Adviser AI (Hidden Brain)', icon: '🧠' },
+        { key: 'auto', label: 'Auto', icon: '🤖' },
+        { key: 'planner', label: 'Planner', icon: '📋' },
+        { key: 'coder', label: 'Coder', icon: '💻' },
+        { key: 'system&web agent', label: 'System & Web Agent', icon: '⚙️' },
+      ];
+
+      // Current saved roless
+      const savedRoles = state.modelRoles || {};
+
+      console.log(theme.info('\n⊕ Model Roles Assignment\n'));
+      console.log(theme.dim(`  Current global model: ${state.currentModel}\n`));
+      console.log(theme.dim(`  Select a role to assign a specific model. Press Ctrl+C to cancel.\n`));
+
+      // Print current role assignments as a table
+      const colW = 22;
+      const modelColW = 38;
+      console.log(
+        theme.dim('  ┌' + '─'.repeat(colW) + '┬' + '─'.repeat(modelColW) + '┐')
+      );
+      console.log(
+        theme.dim('  │') + theme.info(' Role'.padEnd(colW - 1)) +
+        theme.dim('│') + theme.info(' Assigned Model'.padEnd(modelColW - 1)) +
+        theme.dim('│')
+      );
+      console.log(
+        theme.dim('  ├' + '─'.repeat(colW) + '┼' + '─'.repeat(modelColW) + '┤')
+      );
+      for (const r of roles) {
+        const assigned = savedRoles[r.key] || `(default: ${state.currentModel})`;
+        const roleCell = (r.icon + ' ' + r.label).padEnd(colW - 1);
+        const modelCell = assigned.substring(0, modelColW - 2).padEnd(modelColW - 1);
+        console.log(
+          theme.dim('  │') + theme.success(roleCell) +
+          theme.dim('│') + theme.user(modelCell) +
+          theme.dim('│')
+        );
+      }
+      console.log(
+        theme.dim('  └' + '─'.repeat(colW) + '┴' + '─'.repeat(modelColW) + '┘\n')
+      );
+
+      while (true) {
+        const savedRoles = state.modelRoles || {};
+
+        // Pick a role to configure
+        let selectedRoleKey;
+        try {
+          const roleChoices = [
+            ...roles.map(r => ({
+              name: theme.dim(`${r.icon} ${r.label.padEnd(20)} → ${(savedRoles[r.key] || 'default').substring(0, 38)}`),
+              value: r.key
+            })),
+            { name: theme.dim('🗑  Reset ALL roles to default'), value: '__reset__' },
+            { name: theme.dim('✕  Done / Cancel'), value: '__cancel__' }
+          ];
+          selectedRoleKey = await select({
+            message: 'Select role to configure:',
+            choices: roleChoices,
+            theme: getPromptTheme()
+          });
+        } catch (e) {
+          break; // User aborted
+        }
+
+        if (!selectedRoleKey || selectedRoleKey === '__cancel__') {
+          break;
+        }
+
+        if (selectedRoleKey === '__reset__') {
+          state.modelRoles = {};
+          await saveModelRoles({});
+          console.log(theme.success(`\n✔ All role model assignments reset to default (${state.currentModel})\n`));
+          continue;
+        }
+
+        // Pick model for selected role
+        const groups = getModelsGroupedByProvider();
+        const roleInfo = roles.find(r => r.key === selectedRoleKey);
+        console.log(theme.info(`\n${roleInfo.icon} Selecting model for role: ${roleInfo.label}\n`));
+        const selectedModel = await gridPrompt(groups, savedRoles[selectedRoleKey] || state.currentModel);
+
+        if (selectedModel) {
+          const newRoles = { ...savedRoles, [selectedRoleKey]: selectedModel };
+          state.modelRoles = newRoles;
+          await saveModelRoles(newRoles);
+          console.log(theme.success(`\n✔ Role "${roleInfo.label}" assigned to model: ${selectedModel}\n`));
+        } else {
+          console.log(theme.dim('\nModel selection cancelled.\n'));
+        }
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/attach') {
+      try {
+        let inputPath = null;
+        console.log(theme.dim("Opening file picker..."));
+
+        if (process.platform === 'darwin') {
+          try {
+            const { stdout } = await execAsync('osascript -e \'tell application (path to frontmost application as text) to set thefile to choose file with prompt "Select a file to attach"\' -e \'POSIX path of thefile\'');
+            if (stdout && stdout.trim()) {
+              inputPath = stdout.trim();
+            }
+          } catch (macErr) {
+            if (!macErr.message.includes('User cancelled')) {
+              inputPath = await input({ message: 'GUI failed. Enter file path to attach:' });
+            }
+          }
+        } else {
+          inputPath = await input({ message: 'Enter file path to attach:' });
+        }
+
+        if (inputPath && inputPath.trim()) {
+          state.selectedFilePath = inputPath.trim();
+          console.log(theme.success(`✔ Path selected: ${state.selectedFilePath}`));
+        } else {
+          console.log(theme.dim("Attachment cancelled."));
+        }
+      } catch (err) {
+        console.log(theme.dim("Attachment cancelled."));
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/attach_remove' || lowerCmd === '/remove_attach') {
+      if (state.selectedFilePath) {
+        state.selectedFilePath = null;
+        console.log(theme.success(`\n✔ Attachment removed successfully.\n`));
+      } else {
+        console.log(theme.dim(`\nNo attachment found to remove.\n`));
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/test_proj') {
+      console.log(theme.info("\n🛠️ Test/Debug mode selected."));
+
+      let userTestReq = "";
+      try {
+        userTestReq = await input({ message: "What do you want to test or debug?", theme: getPromptTheme() });
+      } catch (e) {
+        console.log(theme.dim("Test mode cancelled."));
+        return { action: 'continue' };
+      }
+
+      if (!userTestReq.trim()) {
+        console.log(theme.dim("Test mode cancelled (no input)."));
+        return { action: 'continue' };
+      }
+
+      console.log(theme.info("\n🔍 Starting AI Analysis..."));
+
+      state.messages.push({
+        role: "user",
+        content: `[TEST AI MODE]\nThe user has requested the following test/debug task: "${userTestReq}".\nPlease review the project using CodeGraph, identify logical errors, syntax issues, or bugs related to this request. Generate a plan and fix them using your native editing tools.`
+      });
+      return { action: 'proceed' };
+    }
+
+    if (cmdStr.startsWith('/test ')) {
+      state.activeTestCommand = cmdStr.replace('/test ', '').trim();
+      state.testRetries = 0;
+      console.log(theme.success(`✔ Auto-Test loop enabled for: ${state.activeTestCommand}`));
+      return { action: 'continue' };
+    }
+
+    if (cmdStr.startsWith('/vision ')) {
+      const parts = cmdStr.split(' ');
+      const imagePath = parts[1];
+      const promptText = parts.slice(2).join(' ') || "Analyze this image and provide the requested code or fix.";
+
+      try {
+        const absPath = path.resolve(process.cwd(), imagePath);
+        const ext = path.extname(absPath).substring(1) || 'jpeg';
+        const base64 = await fs.readFile(absPath, 'base64');
+
+        query = [
+          { type: "text", text: promptText },
+          { type: "image_url", image_url: { url: `data:image/${ext};base64,${base64}` } }
+        ];
+        console.log(theme.info(`👁️ Loaded image: ${imagePath}`));
+      } catch (e) {
+        console.log(theme.error(`❌ Failed to read image: ${e.message}`));
+        return { action: 'continue' };
+      }
+    }
+
+    if (lowerCmd === '/commit') {
+      const projectsDir = PROJECTS_DIR;
+      const spinner = ora(theme.dim('Analyzing Git changes...')).start();
+
+      try {
+        await execAsync('git status', { cwd: projectsDir }).catch(() => { throw new Error('Not a git repository. Please run "git init" first.'); });
+        await execAsync('git add .', { cwd: projectsDir });
+        const { stdout: diffOutput } = await execAsync('git diff --cached', { cwd: projectsDir, maxBuffer: 10 * 1024 * 1024 });
+        if (!diffOutput.trim()) {
+          spinner.info(theme.warning("No changes to commit."));
+          return { action: 'continue' };
+        }
+
+        spinner.text = theme.dim('Generating professional commit message...');
+
+        const aiClient = getClientForModel(state.currentModel);
+        const commitPrompt = `You are an expert developer. Look at the following git diff and write a professional, concise git commit message. 
+Format:
+<Type>(<Scope>): <Subject>
+
+<Optional Body explaining the WHY and WHAT>
+
+Diff:
+${diffOutput.substring(0, 10000)}
+
+Respond ONLY with the commit message text. No markdown blocks.`;
+
+        const commitRes = await aiClient.chat.completions.create({
+          model: state.currentModel,
+          messages: [{ role: 'user', content: commitPrompt }],
+          max_tokens: parseInt(process.env.OUTPUT_CONTEXT_TOKENS || "8192", 10)
+        });
+
+        let commitMsg = commitRes.choices[0].message.content.trim();
+        if (commitMsg.startsWith('```')) commitMsg = commitMsg.replace(/```.*\n/g, '').replace(/```/g, '').trim();
+
+        spinner.stop();
+        console.log(theme.info("\n📝 Proposed Commit Message:\n"));
+        console.log(chalk.cyan(commitMsg) + "\n");
+
+        const proceed = await confirm({ message: 'Do you want to commit and push this?', default: true, theme: getPromptTheme() });
+
+        if (proceed) {
+          const pushSpinner = ora(theme.dim('Committing and Pushing...')).start();
+          const util = await import('util');
+          const { execFile } = await import('child_process');
+          const execFileAsync = util.promisify(execFile);
+          await execFileAsync('git', ['commit', '-m', commitMsg], { cwd: projectsDir });
+
+          try {
+            await execAsync('git push', { cwd: projectsDir });
+            pushSpinner.succeed(theme.success('✔ Successfully committed and pushed to GitHub!'));
+          } catch (pushErr) {
+            pushSpinner.warn(theme.warning(`⚠️ Committed locally, but failed to push (maybe no remote set?).\nError: ${pushErr.message}`));
+          }
+        } else {
+          console.log(theme.dim("Commit aborted. Files remain staged."));
+        }
+      } catch (e) {
+        spinner.fail(theme.error(`❌ Git error: ${e.message}`));
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd.startsWith('/ui_edit ') || lowerCmd === '/ui_edit') {
+      const parts = cmdStr.split(' ');
+      const url = parts[1];
+      const uiPrompt = parts.slice(2).join(' ');
+
+      if (!url || !url.startsWith('http') || !uiPrompt) {
+        console.log(theme.error("Usage: /ui_edit <url> <request> (e.g. /ui_edit http://localhost:3000 Make navbar red)"));
+        return { action: 'continue' };
+      }
+
+      console.log(theme.info(`\n👁️  Visual UI Editor Mode Activated...`));
+      const spinner = ora(theme.dim(`Taking 'Before' screenshot of ${url}...`)).start();
+
+      try {
+        await webAgent.init(true); // Headless for clean screenshot
+        await webAgent.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 2000));
+
+        const projectsDir = PROJECTS_DIR;
+        try { await fs.mkdir(projectsDir); } catch (e) { }
+
+        const beforeImgPath = path.join(projectsDir, 'before_ui.jpeg');
+        await webAgent.page.screenshot({ path: beforeImgPath, fullPage: true, type: 'jpeg', quality: 70 });
+        await webAgent.close();
+
+        const base64 = await fs.readFile(beforeImgPath, 'base64');
+        spinner.succeed(theme.success(`📸 Before screenshot captured.`));
+
+        console.log(theme.info(`🧠 Analyzing UI and preparing code changes...`));
+
+        state.uiEditorActive = true;
+        state.uiEditorUrl = url;
+
+        state.messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: `[VISUAL UI EDITOR MODE]\nTarget URL: ${url}\nUser Request: "${uiPrompt}"\n\nInstructions: \n1.Look at the attached screenshot of the user's web app.\n2. Identify which UI elements need changing based on the request.\n3. Figure out which source files (React/HTML/CSS) in the ${process.env.DEBUG === 'true' ? "'projects/'" : "current"} directory correspond to this UI.\n4. Use 'edit_file' and 'replace_lines_in_file' to edit those files and apply the fix.\n5. Once you are done, reply to the user summarizing the changes. The system will then automatically take an 'After' screenshot.` },
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } }
+          ]
+        });
+        return { action: 'proceed' };
+      } catch (e) {
+        spinner.fail(theme.error(`❌ Failed to capture screenshot: ${e.message}`));
+        if (webAgent.browser) await webAgent.close();
+        return { action: 'continue' };
+      }
+    }
+
+    if (lowerCmd.startsWith('/init ')) {
+      const initTask = cmdStr.slice(6).trim();
+      if (!initTask) {
+        console.log(theme.error("Usage: /init <project description>"));
+        return { action: 'continue' };
+      }
+
+      console.log(theme.info("\n🏗️  Project Architect Mode Activated..."));
+      query = `[PROJECT ARCHITECT MODE]
+The user wants to initialize a brand new project.
+Task: "${initTask}"
+
+Instructions for you (The Architect):
+1. Determine the framework and stack based on the user's request.
+2. Use 'run_terminal_command' to run the CLI scaffolding command inside the ${process.env.DEBUG === 'true' ? "'projects/'" : "current"} directory.
+3. CRITICAL: You MUST use non-interactive flags (e.g., '--yes', '-y', '--tailwind', '--typescript', '--router') so the command does not get stuck waiting for user input.
+   - For Next.js: 'npx create-next-app@latest [name] --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm'
+   - For Vite: 'npm create vite@latest [name] -- --template react-ts'
+4. Wait for the command to finish.
+5. Use 'run_terminal_command' to run 'npx codegraph init' inside the new project directory.
+6. Use 'create_file' and 'edit_file' to build the initial UI or boilerplate files inside the newly created directory.
+7. Tell the user how to start the dev server (e.g., ${process.env.DEBUG === 'true' ? "'cd projects/name && npm run dev'" : "'cd name && npm run dev'"} or suggest using '/final_run_test dev').`;
+    }
+
+    if (lowerCmd.startsWith("/final_run_test ") || lowerCmd === '/final_run_test') {
+      let scriptName;
+      if (lowerCmd.startsWith('/final_run_test ')) {
+        scriptName = cmdStr.slice(16).trim();
+      } else {
+        scriptName = await input({ message: 'Enter script name to run (e.g. dev, start):', theme: getPromptTheme() });
+      }
+
+      if (scriptName && scriptName.trim()) {
+        const projectsDir = PROJECTS_DIR;
+        const result = await startAutoHealer(scriptName.trim(), projectsDir, state.currentModel);
+        if (result && result.hasError) {
+          return { action: 'done', query: result.instruction };
+        }
+      } else {
+        console.log(theme.error("Usage: /final_run_test <script-name> (e.g. /final_run_test dev)"));
+      }
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/clear') {
+      process.stdout.write('\x1Bc');
+      state.screenPrompts = [];
+      console.log(theme.success("✔ Terminal cleared! (AI Memory is preserved)"));
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/new') {
+      process.stdout.write('\x1Bc');
+      printLogo();
+      state.screenPrompts = [];
+      state.globalTaskQueue = [];
+      state.activeTestCommand = null;
+      state.testRetries = 0;
+      state.sessionUndoStack = [];
+      state.lastAiEditedFiles = [];
+      state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
+      state.chatId = 'chat_' + Date.now();
+
+      const { exec } = await import('child_process');
+      exec('npx codegraph sync', { cwd: PROJECTS_DIR }, (err) => { /* Background sync */ });
+
+      console.log(theme.success("✔ Terminal cleared and fresh session started! (Persistent Memory Retained)\n"));
+      return { action: 'continue' };
+    }
+
+    if (lowerCmd === '/choose_project') {
+      let newPath;
+      try {
+        console.log(theme.dim("Opening native folder picker..."));
+        newPath = await nativeFolderPicker(PROJECTS_DIR);
+
+        if (!newPath) {
+          console.log(theme.warning("Native picker cancelled or unavailable. Falling back to terminal picker..."));
+          newPath = await chooseDirectoryInteractive(PROJECTS_DIR);
+        }
+      } catch (e) {
+        console.log(theme.dim("Cancelled."));
+        return { action: 'continue' };
+      }
+
+      if (newPath) {
+        try {
+          const resolvedPath = path.resolve(newPath.trim());
+          const stat = await fs.stat(resolvedPath);
+          if (stat.isDirectory()) {
+            const { setProjectDir } = await import('../../tools/file-system.mjs');
+            setProjectDir(resolvedPath);
+            console.log(theme.success(`\n✔ Project directory changed successfully!`));
+
+            const spinner = ora({ text: theme.dim("Loading project context & skills..."), color: false }).start();
+            try {
+              await detectAndGenerateAutoSkills();
+              state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+              spinner.succeed(theme.success("✔ Project skills and memory updated!"));
+            } catch (e) {
+              spinner.fail(theme.error("Failed to load new project details."));
+            }
+
+            process.stdout.write('\x1Bc');
+            printLogo();
+          } else {
+            console.log(theme.error(`\n❌ Path is not a directory.`));
+          }
+        } catch (err) {
+          console.log(theme.error(`\n❌ Invalid path or directory does not exist: ${err.message}`));
+        }
+      }
+      return { action: 'continue' };
+    }
+  }
+
+  if (lowerCmd === '/web-agent') {
+    const agentChoices = [
+      { name: chalk.gray('⌕ Web Agent Hidden Search'), value: 'web_hidden' },
+      { name: chalk.gray('⚛ Web Agent Automation'), value: 'web_browse' }
+    ];
+    try {
+      const selectedAgent = await select({
+        message: 'Select Active Agent:',
+        choices: agentChoices,
+        default: state.activeAgentMode,
+        theme: getPromptTheme()
+      });
+      state.activeAgentMode = selectedAgent;
+      console.log(theme.success(`✔ Active Agent changed to: ${state.activeAgentMode}`));
+    } catch (e) {
+      console.log(theme.dim("Agent selection cancelled."));
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/auto') {
+    state.isAutoModeEnabled = !state.isAutoModeEnabled;
+    const { saveAutoModeSetting } = await import('../history.mjs');
+    await saveAutoModeSetting(state.isAutoModeEnabled);
+    if (state.isAutoModeEnabled) {
+      console.log(theme.success(`✔ Auto Model Fallback Mode is now ON.`));
+    } else {
+      console.log(theme.success(`✔ Auto Model Fallback Mode is now OFF.`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/refresh') {
+    let spinner = null;
+    try {
+      spinner = ora({ text: theme.dim('Refreshing Auto Workspace Memory...'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
+      await getWorkspaceTree();
+      await detectAndGenerateAutoSkills();
+      const { initCodegraph } = await import('../../tools/codegraph.mjs');
+      await initCodegraph(PROJECTS_DIR);
+      state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+      spinner.succeed(theme.success('✔ Workspace tree, Auto-Skills, and CodeGraph synced successfully!'));
+    } catch (err) {
+      if (spinner) spinner.fail(theme.error(`❌ Failed to refresh workspace: ${err.message}`));
+    }
+    return { action: 'continue' };
+  }
+
+
+  if (lowerCmd.startsWith('/resume ') || lowerCmd === '/resume') {
+    let targetId = cmdStr.slice(8).trim();
+    if (!targetId) {
+      targetId = await input({ message: 'Enter the session ID to resume:', theme: getPromptTheme() });
+    }
+    if (targetId) {
+      const threads = await getAllChatThreads();
+      if (!threads.includes(targetId)) {
+        console.log(theme.error(`❌ Session ID not found: ${targetId}`));
+      } else {
+        const { getChatState, updateChatState } = await import('../db.mjs');
+        const pastState = await getChatState(targetId);
+        let messages = pastState?.messages || [];
+
+        // History summarization is now automatically handled in background by history.mjs
+
+        return { action: 'resume', chatId: targetId, messages: messages };
+      }
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/config') {
+    await handleConfigPrompt();
+    return { action: 'redraw' };
+  }
+  if (lowerCmd === '/theme') {
+    return await handleThemePrompt(state);
+  }
+  if (lowerCmd === '/skills') {
+    await handleSkillsPrompt(state);
+    return { action: 'redraw' };
+  }
+  if (lowerCmd === '/permission') {
+    const modeChoices = [
+      { name: theme.success('ask') + chalk.dim('       - Har bar confirm karega (yes/no)'), value: 'ask' },
+      { name: theme.warning('sensitive') + chalk.dim(' - Jab AI ko lage ke sensitive cheez hai tabhi permission mangega'), value: 'sensitive' },
+      { name: theme.error('full') + chalk.dim('      - Koi permission nahi mangega, sab khud karega'), value: 'full' }
+    ];
+
+    try {
+      const newMode = await select({
+        message: 'Select Auto Permission Mode:',
+        choices: modeChoices,
+        default: state.autoPermissionMode,
+        theme: getPromptTheme()
+      });
+
+      state.autoPermissionMode = newMode;
+      await saveAutoPermissionSetting(newMode);
+      state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+
+      return { action: 'redraw', message: theme.success(`✔ Auto Permission Mode set to: ${newMode.toUpperCase()}\n`) };
+    } catch (e) {
+      return { action: 'redraw', message: theme.dim("Cancelled.\n") };
+    }
+  }
+
+  if (lowerCmd === '/autoprompt') {
+    state.isAutoPromptEnabled = !state.isAutoPromptEnabled;
+    await saveAutoPromptSetting(state.isAutoPromptEnabled);
+    console.log(theme.success(`✔ Auto Prompt Generation switched to: ${state.isAutoPromptEnabled ? 'ON' : 'OFF'}\n`));
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/sound') {
+    const newState = !getSoundEnabled();
+    await setSoundEnabled(newState);
+    if (newState) {
+      console.log(theme.success(`✔ Sound Notifications: ON 🔔\n`));
+      playNotification();
+    } else {
+      console.log(theme.success(`✔ Sound Notifications: OFF 🔇\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/hide_thinking') {
+    state.isThinkingHidden = !state.isThinkingHidden;
+    const { saveThinkingHiddenSetting } = await import('../history.mjs');
+    await saveThinkingHiddenSetting(state.isThinkingHidden);
+    if (state.isThinkingHidden) {
+      console.log(theme.success(`✔ Hide AI Thinking Blocks: ON 🙈\n`) + theme.dim(`  <thinking>...</thinking> blocks will be stripped from responses.\n`));
+    } else {
+      console.log(theme.success(`✔ Hide AI Thinking Blocks: OFF 👁\n`) + theme.dim(`  <thinking>...</thinking> blocks will be shown dimmed in responses.\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/manager_agent') {
+    state.isManagerAgentEnabled = !state.isManagerAgentEnabled;
+    const { saveManagerAgentSetting } = await import('../history.mjs');
+    await saveManagerAgentSetting(state.isManagerAgentEnabled);
+    if (state.isManagerAgentEnabled) {
+      console.log(theme.success(`✔ Agent Manager: ON 🤖\n`) + theme.dim(`  The Manager Orchestrator will now analyze all tasks and delegate them appropriately.\n`));
+    } else {
+      console.log(theme.success(`✔ Agent Manager: OFF 🤖\n`) + theme.dim(`  Tasks will directly execute on the active role without Manager interference.\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/team') {
+    state.isTeamModeEnabled = !state.isTeamModeEnabled;
+    const { saveTeamModeSettings } = await import('../history.mjs');
+    await saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled);
+    if (state.isTeamModeEnabled) {
+      console.log(theme.success(`✔ Multi-Agent Team Mode: ON 👥`));
+      console.log(theme.dim(`All upcoming tasks will be processed by the Planner -> Coder pipeline.\n`));
+    } else {
+      console.log(theme.success(`✔ Multi-Agent Team Mode: OFF 👤`));
+      console.log(theme.dim(`Reverted to standard fast-chat mode.\n`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/auto_continue') {
+    state.isAutoContinueEnabled = !state.isAutoContinueEnabled;
+    if (state.isAutoContinueEnabled) {
+      console.log(theme.success(`✔ Auto Continue on Stuck: ON ♾️`));
+      console.log(theme.dim(`AI will automatically continue if it hits limits.\n`));
+    } else {
+      console.log(theme.success(`✔ Auto Continue on Stuck: OFF`));
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/auto_continue_max_time') {
+    let currentVal = state.autoContinueMaxRetries !== undefined ? state.autoContinueMaxRetries : 3;
+    const { saveAutoContinueMaxTimeSetting } = await import('../history.mjs');
+
+    return new Promise((resolve) => {
+      let isDone = false;
+
+      const render = () => {
+        readline.clearLine(process.stdout, 0);
+        readline.cursorTo(process.stdout, 0);
+        process.stdout.write(
+          theme.info(`⟲ Auto Continue Max Retries: `) +
+          theme.accent(currentVal) +
+          theme.dim(` (Press SPACE to increase, ENTER to confirm, ESC to cancel)`)
+        );
+      };
+
+      const keyHandler = async (ch, key) => {
+        if (isDone) return;
+        if (key && key.name === 'space') {
+          currentVal++;
+          if (currentVal > 15) currentVal = 0;
+          render();
+        } else if (key && key.name === 'return') {
+          isDone = true;
+          process.stdin.removeListener('keypress', keyHandler);
+          process.stdout.write('\n');
+          state.autoContinueMaxRetries = currentVal;
+          await saveAutoContinueMaxTimeSetting(currentVal);
+          resolve({ action: 'redraw', message: theme.success(`\n✔ Auto Continue Max Retries set to: ${currentVal}\n`) });
+        } else if (key && (key.name === 'escape' || (key.ctrl && key.name === 'c'))) {
+          isDone = true;
+          process.stdin.removeListener('keypress', keyHandler);
+          process.stdout.write('\n');
+          resolve({ action: 'redraw', message: theme.dim(`\nMenu cancelled.\n`) });
+        }
+      };
+
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      process.stdin.resume();
+      process.stdin.on('keypress', keyHandler);
+      console.log(); // Print empty line before prompt
+      render();
+    });
+  }
+  if (lowerCmd === '/usage_limit') {
+    let currentLimit = state.tokenUsageLimit || 0;
+    const { saveTokenUsageLimitSetting } = await import('../history.mjs');
+
+    while (true) {
+      const displayVal = currentLimit === 0 ? theme.dim('OFF') : theme.accent(`${currentLimit.toLocaleString()} tokens`);
+      let choice;
+      try {
+        choice = await select({
+          message: `Set Token Usage Limit (Current: ${displayVal}):`,
+          choices: [
+            { name: `➕ Increase limit (+10,000 tokens)`, value: 'add_10k' },
+            { name: `➕ Increase limit (+100,000 tokens)`, value: 'add_100k' },
+            { name: `➕ Increase limit (+1,000,000 tokens)`, value: 'add_1m' },
+            { name: `➖ Decrease limit (-10,000 tokens)`, value: 'sub_10k' },
+            { name: `➖ Decrease limit (-100,000 tokens)`, value: 'sub_100k' },
+            { name: `✍️ Enter Custom Value (e.g. 50k, 1.5M, 500000)`, value: 'custom' },
+            { name: `❌ Disable/Reset Limit`, value: 'disable' },
+            { name: `⬅️ Back`, value: 'back' },
+            { name: `💾 Save & Exit`, value: 'save' }
+          ]
+        });
+      } catch (err) {
+        if (err.name === 'ExitPromptError' || err.name === 'AbortPromptError') {
+          console.log(theme.dim('\nMenu cancelled.\n'));
+          return { action: 'redraw' };
+        }
+        throw err;
+      }
+
+      if (choice === 'back') {
+        return { action: 'redraw' };
+      } else if (choice === 'add_10k') {
+        currentLimit += 10000;
+      } else if (choice === 'add_100k') {
+        currentLimit += 100000;
+      } else if (choice === 'add_1m') {
+        currentLimit += 1000000;
+      } else if (choice === 'sub_10k') {
+        currentLimit = Math.max(0, currentLimit - 10000);
+      } else if (choice === 'sub_100k') {
+        currentLimit = Math.max(0, currentLimit - 100000);
+      } else if (choice === 'disable') {
+        currentLimit = 0;
+        console.log(theme.success('\n✔ Limit disabled.\n'));
+      } else if (choice === 'custom') {
+        let customInput;
+        try {
+          customInput = await input({
+            message: 'Enter token amount (e.g. 50000, 50k, 1.5m):'
+          });
+        } catch (err) {
+          if (err.name === 'ExitPromptError' || err.name === 'AbortPromptError') {
+            console.log(theme.dim('\nInput cancelled.\n'));
+            continue;
+          }
+          throw err;
+        }
+        const parsed = parseTokenInput(customInput);
+        if (parsed !== null) {
+          currentLimit = parsed;
+          console.log(theme.success(`\n✔ Limit set to: ${currentLimit.toLocaleString()} tokens\n`));
+        } else {
+          console.log(theme.error('\n❌ Invalid input. Please enter numbers or formats like 50k / 1.5M.\n'));
+        }
+      } else if (choice === 'save') {
+        state.tokenUsageLimit = currentLimit;
+        await saveTokenUsageLimitSetting(currentLimit);
+        return { action: 'redraw', message: theme.success(`\n✔ Token Usage Limit saved: ${currentLimit === 0 ? 'OFF' : currentLimit.toLocaleString() + ' tokens'}\n`) };
+      }
+    }
+  }
+  if (lowerCmd === '/delete_chats') {
+    let spinner = null;
+    try {
+      spinner = ora({ text: theme.dim('Deleting all chats...'), color: false, spinner: { interval: 80, frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'].map(f => theme.info(f)) } }).start();
+      const success = await deleteAllChats();
+      if (success) {
+        state.screenPrompts = [];
+        state.sessionUndoStack = [];
+        state.lastAiEditedFiles = [];
+        state.messages = [{ role: "system", content: await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel) }];
+        console.log(theme.success("\n✔ All chat history has been permanently deleted! (Persistent Memory Retained)"));
+      } else {
+        console.log(theme.error("\n❌ Failed to delete chats."));
+      }
+    } catch (err) {
+      console.log(theme.error(`\n❌ Error deleting chats: ${err.message}`));
+    } finally {
+      if (spinner) spinner.stop();
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/projects' || lowerCmd === '/cd') {
+    const dirList = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
+    const listStr = dirList.map(e => (e.isDirectory() ? '[DIR]  ' : '[FILE] ') + e.name).join('\n');
+    console.log(theme.info(`\n📁 Projects Directory (${PROJECTS_DIR}):\n${listStr || 'Empty'}\n`));
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/diff') {
+    console.log(theme.dim(`🔍 Reviewing changes in ${process.env.DEBUG === 'true' ? 'projects' : 'workspace'} directory...`));
+    try {
+      const { stdout } = await execAsync("git diff", { cwd: PROJECTS_DIR });
+      if (stdout) {
+        const lines = stdout.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('+') && !line.startsWith('+++')) console.log(chalk.green(line));
+          else if (line.startsWith('-') && !line.startsWith('---')) console.log(chalk.red(line));
+          else if (line.startsWith('@@')) console.log(theme.info(line));
+          else console.log(theme.dim(line));
+        }
+      } else {
+        console.log(theme.info("No uncommitted changes found."));
+      }
+    } catch (e) {
+      console.log(theme.warning("⚠️ 'git diff' failed. Are you inside a valid Git repository?"));
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/exit' || lowerCmd === '/quit') {
+    console.log(theme.success("\n\n\n\n\nGoodbye! 👋\n"));
+    return { action: 'break' };
+  }
+  if (lowerCmd === '/undo') {
+    if (state.lastAiEditedFiles.length > 0) {
+      state.sessionUndoStack.push([...new Set(state.lastAiEditedFiles)]);
+      state.lastAiEditedFiles = [];
+    }
+
+    if (state.sessionUndoStack.length === 0) {
+      console.log(theme.warning('\n⚠️  Nothing to undo — no files have been edited this session.\n'));
+      return { action: 'continue' };
+    }
+
+    const filesToUndo = state.sessionUndoStack.pop();
+    console.log(theme.info(`\n⏪ Undoing turn (${filesToUndo.length} file(s))...`));
+    for (const file of filesToUndo) {
+      const result = await undoAction(file);
+      console.log(theme.dim(result));
+    }
+
+    let lastUserIndex = -1;
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      if (state.messages[i].role === 'user') { lastUserIndex = i; break; }
+    }
+    if (lastUserIndex !== -1) {
+      state.messages = state.messages.slice(0, lastUserIndex);
+      saveChatHistory(state.chatId, state.messages);
+    }
+
+    process.stdout.write('\x1Bc');
+    printLogo();
+    console.log(theme.success(`✔ Undo step complete! Reverted files modified in the last action.\n`));
+    if (state.sessionUndoStack.length > 0) {
+      console.log(theme.info(`ℹ️  You can type /undo again to go back further (${state.sessionUndoStack.length} turn(s) available in session history).\n`));
+    } else {
+      console.log(theme.dim(`(No more undo history available for this session)\n`));
+    }
+
+    state.screenPrompts = [];
+    for (const msg of state.messages) {
+      if (msg.role === 'user') {
+        console.log(theme.user(`\n❯ `) + theme.info.bold('⧉ ') + msg.content);
+        const numNewlines = (msg.content.match(/\n/g) || []).length;
+        state.screenPrompts.push({
+          text: msg.content,
+          relativeRows: 1 + numNewlines,
+          promptText: theme.user('❯ '),
+          copyIconState: 'idle',
+          iconCol: stripAnsiLocal(theme.user('❯ ')).length
+        });
+      } else if (msg.role === 'assistant' && msg.content) {
+        console.log(theme.info(`\n${msg.content}`));
+      }
+    }
+    console.log(theme.dim('\n--- Ready for next command ---\n'));
+    state.lastAiEditedFiles = [];
+    return { action: 'continue' };
+  }
+  if (lowerCmd.startsWith("/undo ")) {
+    let fileToUndo = cmdStr.slice(6).trim();
+    if ((fileToUndo.startsWith('"') && fileToUndo.endsWith('"')) || (fileToUndo.startsWith("'") && fileToUndo.endsWith("'"))) {
+      fileToUndo = fileToUndo.slice(1, -1);
+    }
+    const result = await undoAction(fileToUndo);
+    console.log(theme.info(result));
+
+    if (state.sessionUndoStack.length > 0) {
+      const absPathToUndo = path.resolve(PROJECTS_DIR, fileToUndo);
+      const lastTurn = state.sessionUndoStack[state.sessionUndoStack.length - 1];
+      const newTurn = lastTurn.filter(f => f !== absPathToUndo);
+      if (newTurn.length === 0) {
+        state.sessionUndoStack.pop();
+      } else {
+        state.sessionUndoStack[state.sessionUndoStack.length - 1] = newTurn;
+      }
+    }
+    return { action: 'continue' };
+  }
+  if (lowerCmd === '/history') {
+    let stayInHistory = true;
+
+    while (stayInHistory) {
+      const chats = await getAvailableChats();
+      if (chats.length === 0) {
+        console.log(theme.warning("No previous chats found."));
+        return { action: 'continue' };
+      }
+
+      try {
+        const result = await historyPrompt(chats);
+
+        if (result.action === 'cancel') {
+          stayInHistory = false;
+          return { action: 'redraw', message: theme.dim("Action cancelled.\n") };
+        } else if (result.action === 'delete') {
+          const success = await deleteChat(result.chat.id);
+          if (success) {
+            console.log(theme.success(`✔ Deleted chat: ${result.chat.id}`));
+          } else {
+            console.log(theme.error(`❌ Failed to delete chat: ${result.chat.id}`));
+          }
+        } else if (result.action === 'select') {
+          stayInHistory = false;
+          const selectedChat = result.chat.id;
+          const loadedMsgs = await loadChatHistory(selectedChat);
+          if (loadedMsgs && loadedMsgs.length > 0) {
+            state.messages = loadedMsgs;
+            state.messages[0].content = await buildSystemPrompt(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel);
+            state.chatId = selectedChat;
+
+            return { action: 'redraw', message: theme.success(`\n✔ Loaded chat: ${selectedChat}\n`) };
+          } else {
+            return { action: 'redraw', message: theme.error("\n❌ Failed to load chat.\n") };
+          }
+        }
+      } catch (err) {
+        if (err.message && err.message.includes('SIGINT')) {
+          handleExit();
+          return { action: 'continue' };
+        }
+        stayInHistory = false;
+        throw err;
+      }
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/hotkeys') {
+    const tableStr = `\nKeyboard Shortcuts
+
+Navigation
+
+┌───────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────┐
+│ Key                                                               │ Action                                       │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Up / Down / Left/Ctrl+B / Right/Ctrl+F                            │ Move cursor / browse history (Up when empty) │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Option+Left/Ctrl+Left/Option+B / Option+Right/Ctrl+Right/Option+F │ Move by word                                 │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Home/Ctrl+A                                                       │ Start of line                                │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ End/Ctrl+E                                                        │ End of line                                  │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+]                                                            │ Jump forward to character                    │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+Option+]                                                     │ Jump backward to character                   │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ PageUp / PageDown                                                 │ Scroll by page                               │
+└───────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────┘
+
+Editing
+
+┌─────────────────────────┬──────────────────────────────────────────────┐
+│ Key                     │ Action                                       │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Enter                   │ Send message                                 │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Shift+Enter/Ctrl+J      │ New line                                     │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+W/Option+Backspace │ Delete word backwards                        │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Option+D/Option+Delete  │ Delete word forwards                         │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+U                  │ Delete to start of line                      │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+K                  │ Delete to end of line                        │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+Y                  │ Paste the most-recently-deleted text         │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Option+Y                │ Cycle through the deleted text after pasting │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ Ctrl+-                  │ Undo                                         │
+└─────────────────────────┴──────────────────────────────────────────────┘
+
+Other
+
+┌───────────────────────┬──────────────────────────────────────────┐
+│ Key                   │ Action                                   │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Tab                   │ Path completion / accept autocomplete    │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Escape                │ Cancel autocomplete / abort streaming    │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+C                │ Clear editor (first) / exit (second)     │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+D                │ Exit (when editor is empty)              │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+Z                │ Suspend to background                    │
+├───────────────────────┼──────────────────────────────────────────┤
+│ \`\`                      │ Cycle thinking level                     │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+P / Shift+Ctrl+P │ Cycle models                             │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+L                │ Open model selector                      │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+O                │ Toggle tool output expansion             │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+T                │ Toggle thinking block visibility         │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+G                │ Edit message in external editor          │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Option+Enter          │ Queue follow-up message                  │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Option+Up             │ Restore queued messages                  │
+├───────────────────────┼──────────────────────────────────────────┤
+│ Ctrl+V                │ Paste image from clipboard               │
+├───────────────────────┼──────────────────────────────────────────┤
+│ /                     │ Slash commands                           │
+├───────────────────────┼──────────────────────────────────────────┤
+│ !                     │ Run bash command                         │
+├───────────────────────┼──────────────────────────────────────────┤
+│ !!                    │ Run bash command (excluded from context) │
+└───────────────────────┴──────────────────────────────────────────┘
+
+Extensions
+
+┌──────────┬─────────────────────────────────────────────┐
+│ Key      │ Action                                      │
+├──────────┼─────────────────────────────────────────────┤
+│ F6       │ Toggle Ferment stop policy                  │
+├──────────┼─────────────────────────────────────────────┤
+│ F7       │ Toggle todos overlay                        │
+├──────────┼─────────────────────────────────────────────┤
+│ Option+T │ Toggle thinking view (collapsed / expanded) │
+└──────────┴─────────────────────────────────────────────┘\n`;
+    console.log(theme.info(tableStr));
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/export') {
+    let spinner = null;
+    try {
+      const exportChoice = await select({
+        message: 'What would you like to export?',
+        choices: [
+          { name: 'Export Current Session', value: 'current' },
+          { name: 'Export All Sessions', value: 'all' }
+        ]
+      });
+
+      spinner = ora({ text: theme.dim(`Exporting ${exportChoice === 'all' ? 'all chats' : 'current chat'}...`), color: false }).start();
+
+      let exportData = [];
+
+      if (exportChoice === 'current') {
+        if (!state.messages || state.messages.length === 0) {
+          if (spinner) spinner.stop();
+          console.log(theme.error("\n❌ No messages in the current session to export.\n"));
+          return { action: 'continue' };
+        }
+        exportData = [{ id: state.chatId, messages: state.messages }];
+      } else {
+        const threadIds = await getAllChatThreads();
+        for (const id of threadIds) {
+          const msgs = await loadChatHistory(id);
+          if (msgs && msgs.length > 0) {
+            exportData.push({ id, messages: msgs });
+          }
+        }
+        if (exportData.length === 0) {
+          if (spinner) spinner.stop();
+          console.log(theme.error("\n❌ No chat sessions found to export.\n"));
+          return { action: 'continue' };
+        }
+      }
+
+      const ts = Date.now();
+      const downloadsPath = path.join(os.homedir(), 'Downloads');
+
+      const jsonPath = path.join(downloadsPath, `cli_chats_export_${ts}.json`);
+      await fs.writeFile(jsonPath, JSON.stringify(exportData, null, 2));
+
+      let htmlContent = `<html><head><title>CLI Chat History Export</title><style>body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: #fff; } .chat { border: 1px solid #444; margin-bottom: 20px; padding: 15px; border-radius: 8px; } .msg { margin: 10px 0; } .role-user { color: #5ccfe6; } .role-assistant { color: #a2d92a; } pre { background: #000; padding: 10px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }</style></head><body><h1>CLI Chat History Export</h1>`;
+
+      for (const chat of exportData) {
+        htmlContent += `<div class="chat"><h2>Chat ID: ${chat.id}</h2>`;
+        for (const msg of chat.messages) {
+          if (msg.role !== 'system') {
+            htmlContent += `<div class="msg"><strong class="role-${msg.role}">${msg.role.toUpperCase()}:</strong> <pre>${typeof msg.content === 'string' ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Complex Data'}</pre></div>`;
+          }
+        }
+        htmlContent += `</div>`;
+      }
+      htmlContent += `</body></html>`;
+
+      const htmlPath = path.join(downloadsPath, `cli_chats_export_${ts}.html`);
+      await fs.writeFile(htmlPath, htmlContent);
+
+      spinner.stop();
+      console.log(theme.success(`\n✔ Exported ${exportData.length} chats successfully!`));
+      console.log(theme.info(`JSON: ${jsonPath}`));
+      console.log(theme.info(`HTML: ${htmlPath}\n`));
+    } catch (e) {
+      if (spinner) spinner.stop();
+      console.log(theme.error(`\n❌ Export failed: ${e.message}\n`));
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/import') {
+    try {
+      console.log(theme.dim("Opening JSON file picker..."));
+      let inputPath = null;
+      if (process.platform === 'darwin') {
+        const script = `osascript -e 'tell application (path to frontmost application as text) to set thefile to choose file with prompt "Select a JSON file to import" of type {"json"} default location (path to downloads folder)' -e 'POSIX path of thefile'`;
+        const { stdout } = await execAsync(script);
+        if (stdout && stdout.trim()) {
+          inputPath = stdout.trim();
+        }
+      } else {
+        inputPath = await input({ message: 'Enter full path to the JSON export file:' });
+      }
+
+      if (inputPath && inputPath.trim()) {
+        const fileData = await fs.readFile(inputPath.trim(), 'utf-8');
+        let parsedData = JSON.parse(fileData);
+        if (!Array.isArray(parsedData)) {
+          parsedData = [parsedData];
+        }
+
+        let importedCount = 0;
+        for (const chat of parsedData) {
+          if (chat.id && chat.messages) {
+            await updateChatState(chat.id, { messages: chat.messages });
+            importedCount++;
+          }
+        }
+        console.log(theme.success(`\n✔ Imported ${importedCount} chat session(s) successfully!\n`));
+      } else {
+        console.log(theme.dim("Import cancelled.\n"));
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('User cancelled')) {
+        console.log(theme.dim("Import cancelled.\n"));
+      } else {
+        console.log(theme.error(`\n❌ Import failed: ${e.message}\n`));
+      }
+    }
+    return { action: 'continue' };
+  }
+
+  if (lowerCmd === '/voice_to_text') {
+    const { getVoiceProviderSetting, saveVoiceProviderSetting } = await import('../history.mjs');
+    const currentProv = await getVoiceProviderSetting();
+
+    console.log(theme.warning("\n⚠️  NOTE: Enable Microphone permission for your Terminal in System Settings, then restart the Terminal.\n"));
+
+    const providers = [
+      { name: "Voice by offline (English)" + (currentProv === "offline" ? " (Current)" : ""), value: "offline" },
+      { name: "Voice by online (Any)" + (currentProv === "speechmatics" ? " (Current)" : ""), value: "speechmatics" }
+    ];
+
+    const { inkSelect: select } = await import('../../ui/ink/utils.mjs');
+    try {
+      const selectedProv = await select({
+        message: "Select Voice Provider:",
+        choices: providers,
+        theme: { prefix: theme.success("?") }
+      });
+
+      await saveVoiceProviderSetting(selectedProv);
+      return { action: 'redraw', message: theme.success(`\n✔ Voice provider set to: ${selectedProv}\n`) };
+    } catch (err) {
+      return { action: 'redraw', message: theme.dim("\nProvider selection cancelled.\n") };
+    }
+  }
+
+  if (typeof query === 'string' && query.startsWith('/')) return { action: 'continue' };
+
+  return { action: 'done', query, pendingUiUrl };
+}

@@ -1,0 +1,7 @@
+node_modules
+web-agent-screenshots
+.git
+.env
+.DS_Store
+cheap-app
+*.log

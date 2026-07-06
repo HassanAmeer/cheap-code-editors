@@ -1,0 +1,777 @@
+/**
+ * Manages interactive terminal input, slash command catching, and user prompt interactions.
+ * // Do not remove
+ */
+import readline from 'readline';
+import { exec } from 'child_process';
+import chalk from 'chalk';
+import fs from 'fs/promises';
+import path from 'path';
+import { theme } from '../../ui/theme.mjs';
+import { TerminalState, stripAnsiLocal, countPhysicalLineFeeds } from './console.mjs';
+import { handleExit } from './process.mjs';
+import { PROJECTS_DIR } from '../../tools/file-system.mjs';
+import { saveAutoPermissionSetting, saveLastModel } from '../history.mjs';
+
+export function askInputWithSlashCatch(promptText, initialValue = '', bottomBarTextOrFn = '', activeTip = '', state = null, buildSystemPromptFn = null) {
+  return new Promise((resolve) => {
+    // cheap CLI exact placeholder text
+    const PLACEHOLDER = 'ask anything or type / for commands';
+    let buffer = initialValue;
+    let cursorPos = initialValue.length;
+    let placeholderShowing = (initialValue.length === 0);
+
+    let historyIndex = TerminalState.inputPromptHistory.length;
+    let draftBuffer = initialValue;
+
+    // ── Shared state (declared early so mouseDataHandler can close over them) ──
+    let copyIconState = 'idle'; // 'idle' = ⧉, 'copied' = ✓
+    let lastCursorY = 0;
+    let renderTimeout = null;
+    let ignoreKeypress = false;
+
+    const getCursorPos = () => {
+      return new Promise((resolve) => {
+        ignoreKeypress = true;
+        const onData = (data) => {
+          const str = data.toString();
+          const match = /\[(\d+);(\d+)R/.exec(str);
+          if (match) {
+            process.stdin.removeListener('data', onData);
+            const row = parseInt(match[1], 10) - 1;
+            const col = parseInt(match[2], 10) - 1;
+            ignoreKeypress = false;
+            resolve({ row, col });
+          }
+        };
+        process.stdin.on('data', onData);
+        process.stdout.write('\x1b[6n');
+        setTimeout(() => {
+          process.stdin.removeListener('data', onData);
+          ignoreKeypress = false;
+          resolve(null);
+        }, 100);
+      });
+    };
+
+    const updatePromptIconOnScreen = (relativeRows, iconCol, iconState) => {
+      if (relativeRows <= 0) return;
+      const moveUp = `\x1b[${relativeRows}A`;
+      const moveDown = `\x1b[${relativeRows}B`;
+      const moveCol = `\x1b[${iconCol + 1}G`;
+      const iconStr = iconState === 'copied'
+        ? chalk.green.bold('✔')
+        : theme.info.bold('⧉');
+      process.stdout.write(`\x1b[s${moveUp}${moveCol}${iconStr}\x1b[u`);
+    };
+
+    const showCheckmarkOnPrompt = async (p, clickedOffset) => {
+      if (p.copyIconState === 'copied') return;
+      p.copyIconState = 'copied';
+      updatePromptIconOnScreen(clickedOffset, p.iconCol, 'copied');
+      setTimeout(() => {
+        p.copyIconState = 'idle';
+        updatePromptIconOnScreen(clickedOffset, p.iconCol, 'idle');
+      }, 3000);
+    };
+
+    const copyTextToClipboard = (text) => {
+      if (text.trim().length > 0) {
+        try {
+          const proc = exec('pbcopy');
+          proc.stdin.write(text);
+          proc.stdin.end();
+        } catch (e) { /* ignore */ }
+      }
+    };
+
+    const formatTipMessage = (message) => {
+      if (!message) return '';
+      return message
+        .split(/(`[^`\n]+`)/g)
+        .map((part) =>
+          part.startsWith("`") && part.endsWith("`")
+            ? (theme.accent ? theme.accent(part.slice(1, -1)) : chalk.bold(part.slice(1, -1)))
+            : (theme.dim ? theme.dim(part) : chalk.dim(part))
+        )
+        .join("");
+    };
+
+    // Render tip once if present
+    if (activeTip) {
+      const tipText = theme.dim ? theme.dim("⎡ ⓘ Tip: ") : chalk.dim("⎡ ⓘ Tip: ");
+      const formattedTip = formatTipMessage(activeTip);
+      const connectorText = theme.dim ? theme.dim("⎜") : chalk.dim("⎜");
+      process.stdout.write('\n' + tipText + formattedTip + '\n' + connectorText + '\n');
+    }
+
+    // ── renderLine / renderLineSync ──────────────────────────────────────
+    const renderLine = () => {
+      if (renderTimeout) return;
+      renderTimeout = setTimeout(() => {
+        renderLineSync();
+        renderTimeout = null;
+      }, 5);
+    };
+
+    let isSubmitting = false;
+    let bottomBarText = typeof bottomBarTextOrFn === 'function' ? bottomBarTextOrFn() : bottomBarTextOrFn;
+
+    const renderLineSync = () => {
+      if (lastCursorY > 0) readline.moveCursor(process.stdout, 0, -lastCursorY);
+      readline.cursorTo(process.stdout, 0);
+      readline.clearScreenDown(process.stdout);
+
+      const cols = process.stdout.columns || 80;
+      // cheap uses accent for the left border indicator
+      const leftBorder = theme.accent ? theme.accent('▍ ') : chalk.gray('▍ ');
+      const inputBgColor = theme.customMessageBgHex || '#1e1e1e';
+
+      const maxContentWidth = Math.max(1, cols - 3); // 2 for leftBorder, 1 for safety
+
+      let rawLines = [];
+      if (buffer.length === 0) {
+        rawLines = [PLACEHOLDER];
+        placeholderShowing = true;
+      } else {
+        rawLines = buffer.split('\n');
+        placeholderShowing = false;
+      }
+
+      const processedLines = [];
+      let cursorCharCount = 0;
+      let cursorLineIdx = -1;
+      let cursorColIdx = -1;
+
+      for (let i = 0; i < rawLines.length; i++) {
+        const line = rawLines[i];
+        let lineRemaining = line;
+
+        if (lineRemaining.length === 0) {
+          processedLines.push({ text: "", isCursorHere: (cursorCharCount === cursorPos) });
+          if (cursorCharCount === cursorPos) {
+            cursorLineIdx = processedLines.length - 1;
+            cursorColIdx = 0;
+          }
+          if (i < rawLines.length - 1) {
+            cursorCharCount += 1;
+          }
+          continue;
+        }
+
+        while (lineRemaining.length > 0) {
+          const segment = lineRemaining.slice(0, maxContentWidth);
+          const segmentLen = segment.length;
+          const isCursorInSegment = (cursorPos >= cursorCharCount && cursorPos <= cursorCharCount + segmentLen);
+
+          processedLines.push({ text: segment, isCursorHere: isCursorInSegment });
+
+          if (isCursorInSegment && cursorLineIdx === -1) {
+            cursorLineIdx = processedLines.length - 1;
+            cursorColIdx = cursorPos - cursorCharCount;
+          }
+
+          cursorCharCount += segmentLen;
+          lineRemaining = lineRemaining.slice(maxContentWidth);
+        }
+
+        if (i < rawLines.length - 1) {
+          if (cursorPos === cursorCharCount && cursorLineIdx === -1) {
+            cursorLineIdx = processedLines.length - 1;
+            cursorColIdx = processedLines[processedLines.length - 1].text.length;
+          }
+          cursorCharCount += 1;
+        }
+      }
+
+      if (cursorLineIdx === -1) {
+        cursorLineIdx = processedLines.length - 1;
+        cursorColIdx = processedLines[processedLines.length - 1].text.length;
+      }
+
+      // Add empty lines to match cheap's auto-expanding height
+      while (processedLines.length < 3) {
+        processedLines.push({ text: "", isCursorHere: false });
+      }
+
+      let displayStr = "";
+      let cursorStr = "";
+
+      for (let i = 0; i < processedLines.length; i++) {
+        const lineObj = processedLines[i];
+        const lineText = lineObj.text;
+        const padLen = Math.max(0, maxContentWidth - lineText.length);
+        let renderedLineText = lineText + ' '.repeat(padLen);
+
+        if (placeholderShowing && i === 0) {
+          renderedLineText = '\x1b[38;5;246m\x1b[1m' + renderedLineText + '\x1b[0m';
+        }
+
+        // Exact styling: left border + customMessageBg tint
+        const lineDisplay = leftBorder + chalk.bgHex(inputBgColor)(renderedLineText);
+        displayStr += (i > 0 ? '\n' : '') + lineDisplay;
+
+        if (i < cursorLineIdx) {
+          cursorStr += (i > 0 ? '\n' : '') + '  ' + lineText + ' '.repeat(padLen);
+        } else if (i === cursorLineIdx) {
+          cursorStr += (i > 0 ? '\n' : '') + '  ' + lineText.slice(0, cursorColIdx);
+        }
+      }
+
+            if (state && state.isVoiceOn) {
+        displayStr = chalk.green("Listening... 🎤") + "\n" + displayStr;
+        cursorStr = "\n" + cursorStr;
+      }
+      let fullStrToWrite = displayStr;
+      const currentBottomBar = typeof bottomBarTextOrFn === 'function' ? bottomBarTextOrFn() : bottomBarText;
+
+      const bottomBorderLen = process.stdout.columns || 80;
+      const bottomBorderStr = theme.dim('⏥'.repeat(bottomBorderLen));
+      const plainBottomBorder = '⏥'.repeat(bottomBorderLen);
+
+      if (!isSubmitting) {
+        fullStrToWrite += '\n' + bottomBorderStr;
+        if (currentBottomBar) {
+          fullStrToWrite += '\n' + currentBottomBar;
+        }
+      }
+
+      TerminalState.ignoreWriteNewlines = true;
+      process.stdout.write(fullStrToWrite);
+      TerminalState.ignoreWriteNewlines = false;
+
+      if (isSubmitting) {
+        lastCursorY = 0;
+        return;
+      }
+
+      // Simplified getPosXY by pure newlines, no cols math, because segments are pre-chunked!
+      const getPosXY = (text) => {
+        let x = 0, y = 0;
+        for (let i = 0; i < text.length; i++) {
+          if (text[i] === '\n') {
+            x = 0;
+            y++;
+          } else {
+            x++;
+          }
+        }
+        return { x, y };
+      };
+
+      const plainDisplay = stripAnsiLocal(displayStr);
+      const plainBottomBar = currentBottomBar ? stripAnsiLocal(currentBottomBar) : '';
+
+      const targetPos = getPosXY(cursorStr);
+
+      let fullTextForPos = plainDisplay;
+      if (!isSubmitting) {
+        fullTextForPos += '\n' + plainBottomBorder;
+        if (currentBottomBar) {
+          fullTextForPos += '\n' + plainBottomBar;
+        }
+      }
+
+      const fullPos = getPosXY(fullTextForPos);
+      const dX = targetPos.x - fullPos.x;
+      const dY = targetPos.y - fullPos.y;
+
+      if (dX !== 0 || dY !== 0) readline.moveCursor(process.stdout, dX, dY);
+      lastCursorY = targetPos.y;
+    };
+
+    // ── doCopyBuffer ─────────────────────────────────────────────────────
+    const doCopyBuffer = () => {
+      if (buffer.trim().length > 0) {
+        try {
+          const proc = exec('pbcopy');
+          proc.stdin.write(buffer);
+          proc.stdin.end();
+          copyIconState = 'copied';
+          renderLineSync();
+          setTimeout(() => {
+            copyIconState = 'idle';
+            renderLineSync();
+          }, 3000);
+        } catch (e) { /* ignore */ }
+      }
+    };
+
+    // ── Mouse click handler ───────────────────────────────────────────────
+    TerminalState.activeMouseClickHandler = async (btn, col, clickRow) => {
+      if (btn === 0) { // left button press only
+        const pos = await getCursorPos();
+        if (!pos) return;
+        const currentCursorRow = pos.row;
+        const clickedOffset = currentCursorRow - clickRow;
+
+        const physicalRows = countPhysicalLineFeeds(stripAnsiLocal(promptText) + buffer);
+
+        if (clickedOffset === physicalRows) {
+          const cols = process.stdout.columns || 80;
+          const iconCol = stripAnsiLocal(promptText).length % cols;
+          if (col >= iconCol && col < iconCol + 2) doCopyBuffer();
+        } else {
+          for (const p of TerminalState.screenPrompts) {
+            if (p.relativeRows === clickedOffset) {
+              if (col >= p.iconCol && col < p.iconCol + 2) {
+                copyTextToClipboard(p.text);
+                await showCheckmarkOnPrompt(p, clickedOffset);
+              }
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    // ── stdin setup ───────────────────────────────────────────────────────
+    const prevRaw = process.stdin.isTTY ? !!process.stdin.isRaw : false;
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    process.stdin.resume();
+
+    // NOW enable readline keypress events
+    readline.emitKeypressEvents(process.stdin);
+
+    // Enable X10 button-event mouse tracking only
+    if (process.stdin.isTTY && process.env.ENABLE_COPY_ICON_BUTTON === 'true') process.stdout.write('\x1b[?1000h');
+
+    // Render initial prompt
+    renderLineSync();
+
+    // ── restore / cleanup ─────────────────────────────────────────────────
+    const restore = () => {
+      if (renderTimeout) { clearTimeout(renderTimeout); renderTimeout = null; }
+      process.stdin.removeListener('keypress', handler);
+      TerminalState.activeMouseClickHandler = null;
+      if (process.stdin.isTTY && process.env.ENABLE_COPY_ICON_BUTTON === 'true') process.stdout.write('\x1b[?1000l'); // disable X10
+      if (process.stdin.isTTY) process.stdin.setRawMode(prevRaw);
+    };
+
+    let lastKeyTime = Date.now();
+    let pasteTimeout = null;
+    let pendingSubmit = false;
+
+    // ── keypress handler ──────────────────────────────────────────────────
+    const handler = (char, key) => {
+      if (ignoreKeypress) return;
+
+      const now = Date.now();
+      const timeSinceLastKey = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (pendingSubmit) {
+        clearTimeout(pasteTimeout);
+        pendingSubmit = false;
+        buffer = buffer.slice(0, cursorPos) + '\n' + buffer.slice(cursorPos);
+        cursorPos++;
+      }
+
+      if (!key && !char) return;
+
+      // ESC → exit
+      if (key && key.name === 'escape') {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(()=>{});
+        }
+        renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
+      }
+
+      // Ctrl+C → exit
+      if (key && key.ctrl && key.name === 'c') {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(()=>{});
+        }
+        renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
+      }
+
+      // Shift+V → toggle voice
+      if (key && key.name === 'v' && key.shift) {
+        if (!state) return;
+        if (!state.isVoiceOn) {
+          state.isVoiceOn = 'starting';
+          import('./voice.mjs').then(m => m.startRecording()).then(() => {
+            if (state.isVoiceOn === 'starting') {
+              state.isVoiceOn = true;
+              renderLine();
+            }
+          }).catch(console.error);
+        } else {
+          state.isVoiceOn = false;
+          import('./voice.mjs').then(m => m.cancelRecording()).catch(console.error);
+        }
+        renderLine();
+        return;
+      }
+
+      // Shift+C → Charm the text (AI enhance)
+      if (key && key.name === 'c' && key.shift) {
+        if (!state) return;
+        if (buffer.trim().length === 0) {
+          const origBuffer = buffer;
+          buffer = "[Please write something to charm]";
+          cursorPos = buffer.length;
+          renderLineSync();
+          setTimeout(() => {
+            buffer = origBuffer;
+            cursorPos = buffer.length;
+            renderLineSync();
+          }, 2000);
+          return;
+        }
+
+        const origBuffer = buffer;
+        buffer = origBuffer + "\n[✨ Charming your prompt...]";
+        renderLineSync();
+
+        import('../../providers_models/index.mjs').then(async ({ getClientForModel }) => {
+          const aiClient = getClientForModel((state.modelRoles && state.modelRoles['adviser AI']) || state.currentModel);
+          const TEAM_MODE_NAMES = ['auto', 'planner', 'coder', 'system&web agent'];
+          const activeRole = TEAM_MODE_NAMES[state.teamModeIndex - 1] || 'auto';
+
+          if (state.isManagerAgentEnabled) {
+            const { runManagerCharm } = await import('../core/manager_agent.mjs');
+            return { choices: [{ message: { content: await runManagerCharm(origBuffer, state, aiClient, activeRole) } }] };
+          } else {
+            return aiClient.chat.completions.create({
+              model: state.currentModel,
+              messages: [
+                { role: 'system', content: 'You are an AI assistant that enhances and improves user prompts for a coding agent. Make the prompt clearer, more professional, and more detailed, but keep it concise and direct. Output ONLY the enhanced prompt, with no additional commentary, quotes, or markdown formatting.' },
+                { role: 'user', content: origBuffer }
+              ]
+            });
+          }
+        }).then(response => {
+          if (response && response.choices && response.choices[0] && response.choices[0].message) {
+            buffer = response.choices[0].message.content.trim();
+          } else {
+            buffer = origBuffer;
+          }
+          cursorPos = buffer.length;
+          renderLineSync();
+        }).catch(err => {
+          buffer = origBuffer + "\n[Charm Error: " + err.message + "]";
+          cursorPos = buffer.length;
+          renderLineSync();
+          setTimeout(() => {
+            buffer = origBuffer;
+            cursorPos = buffer.length;
+            renderLineSync();
+          }, 3000);
+        });
+        return;
+      }
+
+      // Shift+Tab or `` → cycle team mode
+      if ((key && ((key.name === 'tab' && key.shift) || key.name === 'backtab')) || char === '\x1b[Z' || (char === '``' || buffer === '``')) {
+        if (buffer === '``') { buffer = ''; cursorPos = 0; }
+        if (state) {
+          state.teamModeIndex = ((state.teamModeIndex || 1) % 4) + 1;
+          import('../history.mjs').then(m => m.saveTeamModeSettings(state.teamModeIndex, state.isTeamModeEnabled)).catch(() => {});
+          renderLine();
+        }
+        return;
+      }
+
+      // Ctrl+L → Open model selector
+      if (key && key.ctrl && key.name === 'l') {
+         buffer = '/model';
+         cursorPos = buffer.length;
+         pendingSubmit = true;
+         handler(); // Trigger submit
+         return;
+      }
+
+      // Ctrl+Z → Suspend
+      if (key && key.ctrl && key.name === 'z') {
+         renderLineSync(); restore(); process.stdout.write('\n'); 
+         process.kill(process.pid, 'SIGTSTP'); 
+         return;
+      }
+
+      // Ctrl+P → cycle active models
+      if (key && key.ctrl && key.name === 'p') {
+        if (state) {
+          import('../../providers_models/index.mjs').then(({ getModelsGroupedByProvider }) => {
+            const allChoices = getModelsGroupedByProvider().flatMap(g => g.choices).filter(c => c && c.value);
+            if (allChoices.length > 0) {
+              let idx = allChoices.findIndex(c => c.value === state.currentModel);
+              idx = (idx + 1) % allChoices.length;
+              state.currentModel = allChoices[idx].value;
+
+              saveLastModel(state.currentModel).catch(() => { });
+
+              if (buildSystemPromptFn) {
+                buildSystemPromptFn(state.isAutoPromptEnabled, state.autoPermissionMode, state.currentModel)
+                  .then(prompt => {
+                    if (state.messages && state.messages.length > 0) {
+                      state.messages[0].content = prompt;
+                    }
+                  }).catch(() => { });
+              }
+              renderLine();
+            }
+          }).catch(() => { });
+        }
+        return;
+      }
+
+      // Ctrl+J → newline fallback
+      if (key && key.ctrl && key.name === 'j') {
+        buffer = buffer.slice(0, cursorPos) + '\n' + buffer.slice(cursorPos);
+        cursorPos++;
+        renderLine();
+        return;
+      }
+
+      // Enter → submit
+      if (key && (key.name === 'return' || key.name === 'enter')) {
+        if (state && state.isVoiceOn) {
+          state.isVoiceOn = false;
+          const origBuffer = buffer;
+          buffer = origBuffer + (origBuffer.length > 0 ? " " : "") + "[⏳ Transcribing...]";
+          renderLineSync();
+          import('./voice.mjs').then(m => {
+            return m.stopRecording().then(() => m.transcribeRecording());
+          }).then(text => {
+            buffer = origBuffer;
+            if (text) {
+              buffer += (buffer.length > 0 ? " " : "") + text;
+              cursorPos = buffer.length;
+            } else {
+              cursorPos = buffer.length;
+            }
+            renderLine();
+          }).catch(err => {
+            buffer = origBuffer;
+            buffer += (buffer.length > 0 ? " " : "") + "[Voice Error: " + err.message + "]";
+            cursorPos = buffer.length;
+            renderLine();
+          });
+          return;
+        }
+        if (key.shift || key.meta || timeSinceLastKey < 10) {
+          buffer = buffer.slice(0, cursorPos) + '\n' + buffer.slice(cursorPos);
+          cursorPos++;
+          renderLine();
+          return;
+        } else {
+          pendingSubmit = true;
+          pasteTimeout = setTimeout(() => {
+            if (pendingSubmit) {
+              pendingSubmit = false;
+              isSubmitting = true;
+
+              // ALWAYS clear the input block from the screen on submit
+              if (lastCursorY > 0) readline.moveCursor(process.stdout, 0, -lastCursorY);
+              readline.cursorTo(process.stdout, 0);
+              readline.clearScreenDown(process.stdout);
+
+              restore();
+
+              const finalStr = buffer.trim();
+              if (finalStr && finalStr !== TerminalState.inputPromptHistory[TerminalState.inputPromptHistory.length - 1]) {
+                TerminalState.inputPromptHistory.push(finalStr);
+              }
+              const cols = process.stdout.columns || 80;
+              const maxW = Math.max(1, cols - 3);
+              let displayLineCount = 0;
+              for (const line of buffer.split('\n')) {
+                displayLineCount += Math.max(1, Math.ceil(line.length / maxW));
+              }
+              const inputHeight = Math.max(3, displayLineCount);
+              const physicalRows = inputHeight + (activeTip ? 2 : 0);
+
+              TerminalState.screenPrompts.push({
+                text: buffer,
+                relativeRows: 1 + physicalRows,
+                promptText: '▌ ',
+                copyIconState: 'idle',
+                iconCol: 2
+              });
+              resolve(buffer);
+            }
+          }, 30);
+          return;
+        }
+      }
+
+      // Ctrl+A / Home
+      if ((key && key.name === 'a' && key.ctrl) || (key && key.name === 'home')) {
+        cursorPos = 0;
+        renderLine();
+        return;
+      }
+
+      // Ctrl+E / End
+      if ((key && key.name === 'e' && key.ctrl) || (key && key.name === 'end')) {
+        cursorPos = buffer.length;
+        renderLine();
+        return;
+      }
+
+      // Left Arrow / Ctrl+B
+      if (key && ((key.name === 'left') || (key.name === 'b' && key.ctrl))) {
+        if (cursorPos > 0) cursorPos--;
+        renderLine(); return;
+      }
+
+      // Option+Left / Option+B (Word Jump Left)
+      if (key && ((key.name === 'left' && key.meta) || (key.name === 'b' && key.meta))) {
+         while (cursorPos > 0 && buffer[cursorPos - 1] === ' ') cursorPos--;
+         while (cursorPos > 0 && buffer[cursorPos - 1] !== ' ') cursorPos--;
+         renderLine();
+         return;
+      }
+
+      // Up Arrow
+      if (key && key.name === 'up') {
+        if (historyIndex > 0) {
+          if (historyIndex === TerminalState.inputPromptHistory.length) draftBuffer = buffer;
+          historyIndex--;
+          buffer = TerminalState.inputPromptHistory[historyIndex];
+          cursorPos = buffer.length;
+          renderLine();
+        }
+        return;
+      }
+
+      // Down Arrow
+      if (key && key.name === 'down') {
+        if (historyIndex < TerminalState.inputPromptHistory.length) {
+          historyIndex++;
+          buffer = (historyIndex === TerminalState.inputPromptHistory.length) ? draftBuffer : TerminalState.inputPromptHistory[historyIndex];
+          cursorPos = buffer.length;
+          renderLine();
+        }
+        return;
+      }
+
+      // Right Arrow / Ctrl+F
+      if (key && ((key.name === 'right') || (key.name === 'f' && key.ctrl))) {
+        if (cursorPos < buffer.length) cursorPos++;
+        renderLine(); return;
+      }
+
+      // Option+Right / Option+F (Word Jump Right)
+      if (key && ((key.name === 'right' && key.meta) || (key.name === 'f' && key.meta))) {
+         while (cursorPos < buffer.length && buffer[cursorPos] === ' ') cursorPos++;
+         while (cursorPos < buffer.length && buffer[cursorPos] !== ' ') cursorPos++;
+         renderLine();
+         return;
+      }
+
+      // Ctrl+U (Delete to start of line)
+      if (key && key.name === 'u' && key.ctrl) {
+        TerminalState.yankBuffer = buffer.slice(0, cursorPos);
+        buffer = buffer.slice(cursorPos);
+        cursorPos = 0;
+        renderLine();
+        return;
+      }
+
+      // Ctrl+K (Delete to end of line)
+      if (key && key.name === 'k' && key.ctrl) {
+         TerminalState.yankBuffer = buffer.slice(cursorPos);
+         buffer = buffer.slice(0, cursorPos);
+         renderLine();
+         return;
+      }
+
+      // Ctrl+Y (Paste Yanked)
+      if (key && key.name === 'y' && key.ctrl) {
+         if (TerminalState.yankBuffer) {
+            buffer = buffer.slice(0, cursorPos) + TerminalState.yankBuffer + buffer.slice(cursorPos);
+            cursorPos += TerminalState.yankBuffer.length;
+            renderLine();
+         }
+         return;
+      }
+
+      // Option+D / Option+Delete (Delete word forward)
+      if (key && ((key.name === 'd' && key.meta) || (key.name === 'delete' && key.meta))) {
+         if (cursorPos < buffer.length) {
+            let endPos = cursorPos;
+            while (endPos < buffer.length && buffer[endPos] === ' ') endPos++;
+            while (endPos < buffer.length && buffer[endPos] !== ' ') endPos++;
+            TerminalState.yankBuffer = buffer.slice(cursorPos, endPos);
+            buffer = buffer.slice(0, cursorPos) + buffer.slice(endPos);
+            renderLine();
+         }
+         return;
+      }
+
+      // Delete Word Backwards (Ctrl+W)
+      if (key && ((key.name === 'backspace' && (key.meta || key.ctrl)) || (key.name === 'w' && key.ctrl))) {
+        if (cursorPos > 0) {
+          let startPos = cursorPos;
+          while (startPos > 0 && buffer[startPos - 1] === ' ') startPos--;
+          while (startPos > 0 && buffer[startPos - 1] !== ' ') startPos--;
+          TerminalState.yankBuffer = buffer.slice(startPos, cursorPos);
+          buffer = buffer.slice(0, startPos) + buffer.slice(cursorPos);
+          cursorPos = startPos;
+          renderLine();
+        }
+        return;
+      }
+
+      // Backspace
+      if (key && key.name === 'backspace') {
+        if (cursorPos > 0) {
+          buffer = buffer.slice(0, cursorPos - 1) + buffer.slice(cursorPos);
+          cursorPos--;
+          renderLine();
+        }
+        return;
+      }
+
+      // Ctrl+D (Exit if empty or Delete forward)
+      if (key && key.name === 'd' && key.ctrl) {
+         if (buffer.length === 0) {
+            renderLineSync(); restore(); process.stdout.write('\n'); handleExit(); return;
+         } else {
+            if (cursorPos < buffer.length) {
+              buffer = buffer.slice(0, cursorPos) + buffer.slice(cursorPos + 1);
+              renderLine();
+            }
+            return;
+         }
+      }
+
+      // Delete
+      if (key && key.name === 'delete') {
+        if (cursorPos < buffer.length) {
+          buffer = buffer.slice(0, cursorPos) + buffer.slice(cursorPos + 1);
+          renderLine();
+        }
+        return;
+      }
+
+      // Ctrl+Y
+      if (key && key.ctrl && key.name === 'y') {
+        doCopyBuffer(); return;
+      }
+
+      if (!char || (key && (key.ctrl || key.meta))) return;
+
+      if (char === '/' && buffer === '') {
+        if (lastCursorY > 0) readline.moveCursor(process.stdout, 0, -lastCursorY);
+        readline.cursorTo(process.stdout, 0);
+        readline.clearScreenDown(process.stdout);
+        restore();
+        resolve('/');
+        return;
+      }
+
+      if (char.length >= 1 && char >= ' ') {
+        buffer = buffer.slice(0, cursorPos) + char + buffer.slice(cursorPos);
+        cursorPos += char.length;
+        renderLine();
+      }
+    };
+
+    process.stdin.on('keypress', handler);
+  });
+}

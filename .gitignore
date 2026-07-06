@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+
+# Env files
+.env
+
+# Ignore generated chats and specific projects if you don't want to push them
+chats-history/*.json
+projects/*
+!projects/.gitkeep
+
+# Exclude SQLite databases and temp files
+*.db
+*.db-shm
+*.db-wal
+db/chat_history_state_and_agent_memory/cli_data.db*
+
+# Exclude log files
+*.log
+db/debug_logs/*.log
+

@@ -1,0 +1,61 @@
+{
+  "name": "cheap-cli",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bin": {
+    "cheap": "./bin/cheap.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.69",
+    "@babel/core": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/register": "^7.29.7",
+    "@colbymchenry/codegraph": "^1.1.1",
+    "@inquirer/prompts": "^8.5.2",
+    "@langchain/core": "^1.2.1",
+    "@langchain/langgraph": "^1.4.7",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.3",
+    "@speechmatics/auth": "^0.1.0",
+    "@speechmatics/real-time-client": "^8.5.0",
+    "ai": "^6.0.199",
+    "better-sqlite3": "^12.11.1",
+    "chalk": "^5.6.2",
+    "cli-spinners": "^3.4.0",
+    "diff": "^9.0.0",
+    "figlet": "^1.11.0",
+    "ink": "^7.1.0",
+    "ink-gradient": "^4.0.1",
+    "ink-markdown": "^1.0.4",
+    "ink-progress-bar": "^3.0.0",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-syntax-highlight": "^2.0.2",
+    "ink-text-input": "^6.0.0",
+    "log-update": "^8.0.0",
+    "marked": "^18.0.5",
+    "marked-terminal": "^7.3.0",
+    "openai": "^6.42.0",
+    "ora": "^9.4.0",
+    "playwright": "^1.60.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "react": "^19.2.7"
+  },
+  "overrides": {
+    "ink-syntax-highlight": {
+      "ink": "$ink",
+      "react": "$react"
+    },
+    "marked-terminal": {
+      "marked": "$marked"
+    }
+  }
+}
