@@ -94,6 +94,9 @@ export async function ensureVoiceDependencies() {
     if (soxDir && !process.env.PATH.includes(soxDir)) {
       process.env.PATH = `${soxDir};${process.env.PATH}`;
     }
+    if (!process.env.AUDIODRIVER) {
+      process.env.AUDIODRIVER = 'waveaudio';
+    }
   }
 
   const require = createRequire(import.meta.url);
@@ -108,11 +111,32 @@ export async function ensureVoiceDependencies() {
   transformersPath = path.join(voiceDepsPath, "node_modules", "@xenova/transformers");
   const recordPath = path.join(voiceDepsPath, "node_modules", "node-record-lpcm16");
 
-  if (!fs.existsSync(transformersPath) || !fs.existsSync(recordPath)) {
-    let spinner = ora({ text: theme.dim("Downloading voice dependencies... (This might take a moment)"), color: false }).start();
+  let needsInstall = !fs.existsSync(transformersPath) || !fs.existsSync(recordPath);
+
+  if (!needsInstall) {
     try {
-      await execAsync("bun install @xenova/transformers node-record-lpcm16", { cwd: voiceDepsPath });
-      spinner.succeed(theme.success("Dependencies downloaded successfully!"));
+      require(recordPath);
+      const { pathToFileURL } = await import('url');
+      await import(pathToFileURL(transformersPath).href);
+    } catch (e) {
+      needsInstall = true;
+    }
+  }
+
+  if (needsInstall) {
+    let spinner = ora({ text: theme.dim("Downloading/repairing voice dependencies... (This might take a moment)"), color: false }).start();
+    try {
+      const nmPath = path.join(voiceDepsPath, "node_modules");
+      if (fs.existsSync(nmPath)) {
+        fs.rmSync(nmPath, { recursive: true, force: true });
+      }
+
+      // Use npm on Windows because Bun has known issues running post-install scripts for native packages like sharp on Windows
+      const installCmd = isWin
+        ? "npm install @xenova/transformers node-record-lpcm16 --no-audit --no-fund"
+        : "bun install @xenova/transformers node-record-lpcm16";
+      await execAsync(installCmd, { cwd: voiceDepsPath });
+      spinner.succeed(theme.success("Dependencies installed/repaired successfully!"));
     } catch (err) {
       spinner.fail(theme.error("Failed to install dependencies."));
       throw new Error(`Error installing dependencies: ${err.message}`);
@@ -238,6 +262,22 @@ export async function startRecording() {
       audioType: "raw",
     });
 
+    let recordStderr = "";
+    if (smRecorder.process && smRecorder.process.stderr) {
+      smRecorder.process.stderr.on("data", (chunk) => {
+        recordStderr += chunk.toString();
+      });
+    }
+
+    smRecorder.stream().on("error", (err) => {
+      const errMsg = err?.message || err || "Unknown error";
+      logDebug("smRecorder stream error: " + errMsg + (recordStderr ? "\nStderr: " + recordStderr : ""));
+      console.error("\n[Voice Recording Error]:", errMsg);
+      if (recordStderr) {
+        console.error("[Voice Recording Stderr]:", recordStderr);
+      }
+    });
+
     const isDebugEnabled = process.env.DEBUG === 'true';
     const debugAudioPath = path.join(process.cwd(), 'db/debug_logs', 'debug-audio.raw');
     if (isDebugEnabled && fs.existsSync(debugAudioPath)) fs.unlinkSync(debugAudioPath);
@@ -290,6 +330,22 @@ export async function startRecording() {
     sampleRate: 16000,
     channels: 1,
     audioType: "raw",
+  });
+
+  let recordStderr = "";
+  if (recording.process && recording.process.stderr) {
+    recording.process.stderr.on("data", (chunk) => {
+      recordStderr += chunk.toString();
+    });
+  }
+
+  recording.stream().on("error", (err) => {
+    const errMsg = err?.message || err || "Unknown error";
+    logDebug("recording stream error: " + errMsg + (recordStderr ? "\nStderr: " + recordStderr : ""));
+    console.error("\n[Voice Recording Error]:", errMsg);
+    if (recordStderr) {
+      console.error("[Voice Recording Stderr]:", recordStderr);
+    }
   });
 
   recording.stream().pipe(file);
@@ -377,6 +433,7 @@ export async function transcribeRecording(onProgress) {
   }
 
   const langOption = `{ language: "english", task: "transcribe" }`;
+  let workerScriptPath = null;
 
   return new Promise((resolve, reject) => {
     if (!audioPath) {
@@ -413,14 +470,30 @@ export async function transcribeRecording(onProgress) {
       run();
     `;
 
+    workerScriptPath = path.join(os.tmpdir(), "voice_worker_" + Date.now() + ".js");
+    fs.writeFileSync(workerScriptPath, script, "utf-8");
+
     let stderrData = "";
-    const worker = spawn(process.execPath, ["-e", script], {
+    const worker = spawn(process.execPath, [workerScriptPath], {
       stdio: ["ignore", "ignore", "pipe"],
     });
+
+    let isTimedOut = false;
+    let timeout = setTimeout(() => {
+      isTimedOut = true;
+      worker.kill();
+    }, 60000);
 
     worker.stderr.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("JSON_PROGRESS:")) {
+        // Reset timeout while actively downloading model
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          isTimedOut = true;
+          worker.kill();
+        }, 60000);
+
         const parts = str.split("JSON_PROGRESS:");
         for (let i = 1; i < parts.length; i++) {
           const jsonStr = parts[i].split("\n")[0];
@@ -449,16 +522,10 @@ export async function transcribeRecording(onProgress) {
       }
     });
 
-    let isTimedOut = false;
-    const timeout = setTimeout(() => {
-      isTimedOut = true;
-      worker.kill();
-    }, 45000);
-
     worker.on("close", (code) => {
       clearTimeout(timeout);
       if (isTimedOut) {
-        reject(new Error("Transcription timed out after 45 seconds. Please try again."));
+        reject(new Error("Transcription timed out after 60 seconds of inactivity. Please try again."));
       } else if (code !== 0) {
         const actualErrors = stderrData
           .split('\n')
@@ -488,6 +555,7 @@ export async function transcribeRecording(onProgress) {
     });
   }).finally(() => {
     try { fs.unlinkSync(audioPath); } catch (e) { }
+    try { if (workerScriptPath) fs.unlinkSync(workerScriptPath); } catch (e) { }
     recording = null;
     file = null;
     audioPath = null;

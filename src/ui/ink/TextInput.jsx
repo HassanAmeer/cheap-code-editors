@@ -44,12 +44,15 @@ export default function TextInput({
 
   useInput(
     async (input, key) => {
-      // 0. Shift+C Charm hotkey
+      // 0. Global Hotkey interception (Charm, Voice)
       if (input === 'C' || (key.name === 'c' && key.shift)) {
         if (onCharm) {
           onCharm();
           return;
         }
+      }
+      if (input === 'V' || (key.name === 'v' && key.shift)) {
+        return; // Ignore global voice toggle hotkey bleeding
       }
 
       // 1. History Navigation
@@ -156,13 +159,6 @@ export default function TextInput({
       }
       // 6. Typing Printable Characters
       else {
-        // Intercept Shift+V voice toggle bleeding
-        if (uiBridge.lastVoiceToggleTime && (Date.now() - uiBridge.lastVoiceToggleTime < 50)) {
-          if (input === 'V' || input === 'v') {
-            return;
-          }
-        }
-
         nextValue = value.slice(0, cursorOffset) + input + value.slice(cursorOffset);
         nextCursorOffset += input.length;
       }

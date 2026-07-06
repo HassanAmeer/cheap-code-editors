@@ -55,7 +55,7 @@
   "isThinkingHidden": false,
   "isManagerAgentEnabled": false,
   "modelRoles": {
-    "auto": "big-pickle",
+    "auto": "deepseek-v4-flash-free",
     "planner": "deepseek-v4-flash-free",
     "builder": "big-pickle",
     "fixer": "deepseek-v4-flash-free",
@@ -73,7 +73,7 @@
     "architect": "deepseek-v4-flash-free",
     "engineer": "deepseek-v4-flash-free",
     "operator": "deepseek-v4-flash-free",
-    "coder": "big-pickle",
+    "coder": "north-mini-code-free",
     "adviser AI": "deepseek-v4-flash-free",
     "system&web agent": "north-mini-code-free"
   },
