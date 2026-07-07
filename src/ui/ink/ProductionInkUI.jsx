@@ -191,7 +191,7 @@ export const StatusBarComponent = ({ statusBar }) => {
   const activeModel = roleModel || statusBar.model || 'unknown';
 
   // Context bar
-  const BAR_WIDTH = 16;
+  const BAR_WIDTH = 12;
   const tokensUsed = statusBar.tokensUsed || 0;
   const MAX_TOKENS = 200000;
   const pct = Math.round(Math.min(100, (tokensUsed / MAX_TOKENS) * 100));
@@ -237,8 +237,6 @@ export const StatusBarComponent = ({ statusBar }) => {
           <Text color="gray"> · </Text>
           <Text color="gray">charm: → shift+c </Text>
 
-          <Text color="gray"> · </Text>
-          <Text color="gray">Ctrl+O toggle collapse</Text>
         </Box>
         <Box>
           <Text color="gray">/ for commands</Text>
